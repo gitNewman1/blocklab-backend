@@ -1,0 +1,42 @@
+root@hcss-ecs-fa48 blocklab-backend]# npm run build
+
+> blocklab-backend@1.0.0 build
+> tsc
+
+src/routes/admin/models.ts:65:11 - error TS2322: Type 'Part[]' is not assignable to type 'JsonNull | InputJsonValue'.
+  Type 'Part[]' is not assignable to type 'InputJsonObject'.
+    Index signature for type 'string' is missing in type 'Part[]'.
+
+65           partsJson: parsed.parts,
+             ~~~~~~~~~
+
+  node_modules/.prisma/client/index.d.ts:2010:5
+    2010     partsJson: JsonNullValueInput | InputJsonValue
+             ~~~~~~~~~
+    The expected type comes from property 'partsJson' which is declared here on type '(Without<ModelCreateInput, ModelUncheckedCreateInput> & ModelUncheckedCreateInput) | (Without<...> & ModelCreateInput)'
+
+src/routes/admin/models.ts:66:11 - error TS2322: Type 'Step[]' is not assignable to type 'JsonNull | InputJsonValue'.
+  Type 'Step[]' is not assignable to type 'InputJsonObject'.
+    Index signature for type 'string' is missing in type 'Step[]'.
+
+66           stepsJson: parsed.steps
+             ~~~~~~~~~
+
+  node_modules/.prisma/client/index.d.ts:2011:5
+    2011     stepsJson: JsonNullValueInput | InputJsonValue
+             ~~~~~~~~~
+    The expected type comes from property 'stepsJson' which is declared here on type '(Without<ModelCreateInput, ModelUncheckedCreateInput> & ModelUncheckedCreateInput) | (Without<...> & ModelCreateInput)'
+
+src/services/obs.service.ts:1:23 - error TS7016: Could not find a declaration file for module 'esdk-obs-nodejs'. '/var/www/blocklab-backend/node_modules/esdk-obs-nodejs/lib/obs.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/esdk-obs-nodejs` if it exists or add a new declaration (.d.ts) file containing `declare module 'esdk-obs-nodejs';`
+
+1 import ObsClient from 'esdk-obs-nodejs';
+                        ~~~~~~~~~~~~~~~~~
+
+
+Found 3 errors in 2 files.
+
+Errors  Files
+     2  src/routes/admin/models.ts:65
+     1  src/services/obs.service.ts:1
+[root@hcss-ecs-fa48 blocklab-backend]#

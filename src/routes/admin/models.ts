@@ -62,8 +62,8 @@ export async function modelsRoutes(app: FastifyInstance) {
           thumbnailUrl: thumbUrl,
           ioFileUrl: ioUrl,
           model3dUrl: glbUrl,
-          partsJson: parsed.parts,
-          stepsJson: parsed.steps
+          partsJson: parsed.parts as any,
+          stepsJson: parsed.steps as any
         }
       });
 
