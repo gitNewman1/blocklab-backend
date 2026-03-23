@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Model {
+  id           Int      @id @default(autoincrement())
+  name         String   @db.VarChar(100)
+  thumbnailUrl String?  @map("thumbnail_url")
+  ioFileUrl    String   @map("io_file_url")
+  model3dUrl   String   @map("model_3d_url")
+  partsJson    Json     @map("parts_json")
+  stepsJson    Json     @map("steps_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("models")
+  @@index([createdAt(sort: Desc)])
+}
