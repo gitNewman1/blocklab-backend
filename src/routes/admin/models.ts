@@ -70,8 +70,7 @@ export async function modelsRoutes(app: FastifyInstance) {
         files.thumbnail ? storageService.uploadFile(files.thumbnail, 'thumbnails') : Promise.resolve(null)
       ]);
 
-      const ioContent = files.io_file.data.toString('utf-8');
-      const parsed = await ioParserService.parseIOFile(ioContent);
+      const parsed = await ioParserService.parseIOFileBuffer(files.io_file.data);
 
       const model = await prisma.model.create({
         data: {

@@ -15,6 +15,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "@fastify/cors": "^9.0.1",
     "@fastify/multipart": "^8.1.0",
     "@prisma/client": "^5.10.2",
@@ -23,6 +24,7 @@
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/node": "^20.11.24",
     "@types/xml2js": "^0.4.14",
     "prisma": "^5.10.2",
