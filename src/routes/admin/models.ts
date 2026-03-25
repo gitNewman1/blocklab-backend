@@ -1,26 +1,21 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { OBSService } from '../../services/obs.service';
+import { LocalStorageService } from '../../services/local-storage.service';
 import { IOParserService } from '../../services/io-parser.service';
+import { UploadedFile } from '../../types';
 
 const prisma = new PrismaClient();
-const obsService = new OBSService();
+const storageService = new LocalStorageService();
 const ioParserService = new IOParserService();
+const allowedThumbnailExts = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 export async function modelsRoutes(app: FastifyInstance) {
   app.post('/upload', async (request, reply) => {
     try {
-      const data = await request.file();
-      if (!data) {
-        return reply.code(400).send({
-          success: false,
-          message: '缺少文件',
-          error: 'MISSING_FILE'
-        });
-      }
+      request.log.info('Start processing model upload request');
 
       const parts = request.parts();
-      const files: any = {};
+      const files: Record<string, UploadedFile> = {};
       let name = '';
 
       for await (const part of parts) {
@@ -32,25 +27,47 @@ export async function modelsRoutes(app: FastifyInstance) {
             encoding: part.encoding,
             data: buffer
           };
-        } else {
-          if (part.fieldname === 'name') {
-            name = part.value as string;
-          }
+          continue;
+        }
+
+        if (part.fieldname === 'name') {
+          name = String(part.value || '');
         }
       }
 
       if (!name || !files.io_file || !files.glb_file) {
         return reply.code(400).send({
           success: false,
-          message: '缺少必填参数: name, io_file, glb_file',
+          message: 'Missing required fields: name, io_file, glb_file',
           error: 'MISSING_REQUIRED_FIELD'
+        });
+      }
+      if (!hasFileExtension(files.io_file.filename, '.io')) {
+        return reply.code(400).send({
+          success: false,
+          message: 'io_file must be a .io file',
+          error: 'INVALID_IO_FILE'
+        });
+      }
+      if (!hasFileExtension(files.glb_file.filename, '.glb')) {
+        return reply.code(400).send({
+          success: false,
+          message: 'glb_file must be a .glb file',
+          error: 'INVALID_GLB_FILE'
+        });
+      }
+      if (files.thumbnail && !hasOneOfExtensions(files.thumbnail.filename, allowedThumbnailExts)) {
+        return reply.code(400).send({
+          success: false,
+          message: 'thumbnail must be one of .jpg, .jpeg, .png, .webp',
+          error: 'INVALID_THUMBNAIL_FILE'
         });
       }
 
       const [ioUrl, glbUrl, thumbUrl] = await Promise.all([
-        obsService.uploadFile(files.io_file, 'io-files'),
-        obsService.uploadFile(files.glb_file, '3d-models'),
-        files.thumbnail ? obsService.uploadFile(files.thumbnail, 'thumbnails') : Promise.resolve(null)
+        storageService.uploadFile(files.io_file, 'io-files'),
+        storageService.uploadFile(files.glb_file, 'models-3d'),
+        files.thumbnail ? storageService.uploadFile(files.thumbnail, 'thumbnails') : Promise.resolve(null)
       ]);
 
       const ioContent = files.io_file.data.toString('utf-8');
@@ -69,10 +86,11 @@ export async function modelsRoutes(app: FastifyInstance) {
 
       return reply.send({
         success: true,
-        message: '模型上传成功',
+        message: 'Model uploaded successfully',
         data: model
       });
     } catch (error: any) {
+      request.log.error('Model upload failed', { error: error.message, stack: error.stack });
       return reply.code(500).send({
         success: false,
         message: error.message,
@@ -80,4 +98,18 @@ export async function modelsRoutes(app: FastifyInstance) {
       });
     }
   });
+}
+
+function hasFileExtension(filename: string, ext: string): boolean {
+  return filename.toLowerCase().endsWith(ext.toLowerCase());
+}
+
+function hasOneOfExtensions(filename: string, exts: Set<string>): boolean {
+  const lower = filename.toLowerCase();
+  for (const ext of exts) {
+    if (lower.endsWith(ext)) {
+      return true;
+    }
+  }
+  return false;
 }

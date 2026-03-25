@@ -1,75 +1,62 @@
 # BlockLab Backend
 
-BlockLab 后端 API 服务器
+Backend API for BlockLab model upload and `.io` parsing.
 
-## 功能
+## Features
+- Upload model files: `.io`, `.glb`, optional thumbnail
+- Parse `.io` and store `parts_json` / `steps_json`
+- Save uploaded files to local disk (`uploads/`)
+- Store model metadata in PostgreSQL via Prisma
 
-- 模型文件上传（.io 和 .glb）
-- .io 文件自动解析
-- 华为云 OBS 文件存储
-- PostgreSQL 数据库存储
-
-## 技术栈
-
+## Tech Stack
 - Node.js 18+
 - TypeScript
 - Fastify
 - Prisma
 - PostgreSQL
-- 华为云 OBS
 
-## 快速开始
-
-### 1. 安装依赖
-
+## Quick Start
+1. Install dependencies
 ```bash
 npm install
 ```
 
-### 2. 配置环境变量
-
-复制 `.env.example` 为 `.env` 并填写配置：
-
+2. Configure environment variables
 ```bash
 cp .env.example .env
 ```
 
-### 3. 初始化数据库
-
+3. Initialize database
 ```bash
 npx prisma generate
 npx prisma migrate dev
 ```
 
-### 4. 启动开发服务器
-
+4. Start development server
 ```bash
 npm run dev
 ```
 
-服务器将在 http://localhost:3000 启动
+Server listens on `http://localhost:3000`.
 
-## API 接口
+## API
 
-### 健康检查
+### Health check
+`GET /health`
 
-```
-GET /health
-```
+### Upload model
+`POST /api/admin/models/upload` (`multipart/form-data`)
 
-### 上传模型
+Required fields:
+- `name`: model name
+- `io_file`: `.io` file
+- `glb_file`: `.glb` file
 
-```
-POST /api/admin/models/upload
-Content-Type: multipart/form-data
+Optional fields:
+- `thumbnail`: image file
 
-参数：
-- name: 模型名称
-- io_file: .io 文件
-- glb_file: .glb 文件
-- thumbnail: 缩略图（可选）
-```
+## Local File Storage
+- Default upload root: `./uploads`
+- Returned file URL format: `{PUBLIC_BASE_URL}/static/{folder}/{filename}`
+- Production should expose `uploads/` via Nginx `/static/` mapping.
 
-## 部署
-
-参见 `docs/deployment-guide.md`

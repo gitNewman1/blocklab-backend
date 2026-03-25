@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { modelsRoutes } from './routes/admin/models';
+import { config } from './config';
 
 export async function buildApp() {
   const app = Fastify({
@@ -11,7 +12,7 @@ export async function buildApp() {
   await app.register(cors);
   await app.register(multipart, {
     limits: {
-      fileSize: 50 * 1024 * 1024
+      fileSize: config.storage.maxFileSizeMb * 1024 * 1024
     }
   });
 
