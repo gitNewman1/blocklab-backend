@@ -90,7 +90,7 @@ export async function modelsRoutes(app: FastifyInstance) {
         data: model
       });
     } catch (error: any) {
-      request.log.error('Model upload failed', { error: error.message, stack: error.stack });
+      request.log.error({ error: error.message, stack: error.stack }, 'Model upload failed');
       return reply.code(500).send({
         success: false,
         message: error.message,
