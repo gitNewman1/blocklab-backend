@@ -27,7 +27,7 @@ export class LocalStorageService {
   }
 
   private ensureBaseFolders(): void {
-    const folders = ['io-files', 'models-3d', 'thumbnails', 'posts'];
+    const folders = ['io-files', 'models-3d', 'thumbnails', 'manuals', 'posts'];
     for (const folder of folders) {
       fs.mkdirSync(path.join(config.storage.uploadRoot, folder), { recursive: true });
     }
@@ -38,4 +38,3 @@ export class LocalStorageService {
     return name.replace(/[^a-zA-Z0-9._-]/g, '_');
   }
 }
-

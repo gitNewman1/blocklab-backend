@@ -258,8 +258,8 @@
           </div>
 
           <div class="form-group">
-            <label for="thumbnail">缩略图（可选）</label>
-            <input type="file" id="thumbnail" name="thumbnail" accept=".jpg,.jpeg,.png,.webp,image/*">
+            <label for="manualFile">安装说明书（可选）</label>
+            <input type="file" id="manualFile" name="manual_file" accept=".pdf,application/pdf">
           </div>
 
           <button type="submit" id="uploadSubmitBtn">上传</button>
@@ -341,14 +341,14 @@
       const nameInput = document.getElementById('name');
       const ioInput = document.getElementById('ioFile');
       const glbInput = document.getElementById('glbFile');
-      const thumbnailInput = document.getElementById('thumbnail');
+      const manualInput = document.getElementById('manualFile');
 
       const formData = new FormData();
       formData.append('name', nameInput.value);
       formData.append('io_file', ioInput.files[0]);
       formData.append('glb_file', glbInput.files[0]);
-      if (thumbnailInput.files[0]) {
-        formData.append('thumbnail', thumbnailInput.files[0]);
+      if (manualInput.files[0]) {
+        formData.append('manual_file', manualInput.files[0]);
       }
       if (confirmDuplicate) {
         formData.append('confirm_duplicate', 'true');
@@ -417,7 +417,7 @@
         setStatus(
           statusEl,
           'success',
-          `上传成功\n模型 ID：${data.data.id}\n模型名称：${data.data.name}`
+          `上传成功\n模型 ID：${data.data.id}\n模型名称：${data.data.name}\n说明书地址：${data.data.manualUrl || '无'}`
         );
       } catch (error) {
         setStatus(statusEl, 'error', `上传失败\n错误信息：${error.message}`);

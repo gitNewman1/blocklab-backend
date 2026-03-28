@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 const storageService = new LocalStorageService();
 const ioParserService = new IOParserService();
 const rebrickableService = new RebrickableService();
-const allowedThumbnailExts = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const allowedManualExts = new Set(['.pdf']);
 
 export async function modelsRoutes(app: FastifyInstance) {
   app.post('/upload', async (request, reply) => {
@@ -68,11 +68,11 @@ export async function modelsRoutes(app: FastifyInstance) {
           error: 'INVALID_GLB_FILE'
         });
       }
-      if (files.thumbnail && !hasOneOfExtensions(files.thumbnail.filename, allowedThumbnailExts)) {
+      if (files.manual_file && !hasOneOfExtensions(files.manual_file.filename, allowedManualExts)) {
         return reply.code(400).send({
           success: false,
-          message: 'thumbnail must be one of .jpg, .jpeg, .png, .webp',
-          error: 'INVALID_THUMBNAIL_FILE'
+          message: 'manual_file must be a .pdf file',
+          error: 'INVALID_MANUAL_FILE'
         });
       }
 
@@ -127,18 +127,10 @@ export async function modelsRoutes(app: FastifyInstance) {
         });
       }
 
-      const thumbnailFile = files.thumbnail || parsed.extractedThumbnail;
-      const thumbnailSource = files.thumbnail
-        ? 'request'
-        : parsed.extractedThumbnail
-        ? 'io_embedded'
-        : 'none';
-      request.log.info({ thumbnailSource }, 'Resolved thumbnail source');
-
-      const [ioUrl, glbUrl, thumbUrl] = await Promise.all([
+      const [ioUrl, glbUrl, manualUrl] = await Promise.all([
         storageService.uploadFile(files.io_file, 'io-files'),
         storageService.uploadFile(files.glb_file, 'models-3d'),
-        thumbnailFile ? storageService.uploadFile(thumbnailFile, 'thumbnails') : Promise.resolve(null)
+        files.manual_file ? storageService.uploadFile(files.manual_file, 'manuals') : Promise.resolve(null)
       ]);
 
       const enrichedParts = await rebrickableService.enrichParts(parsed.parts, request.log);
@@ -154,7 +146,7 @@ export async function modelsRoutes(app: FastifyInstance) {
       const model = await prisma.model.create({
         data: {
           name,
-          thumbnailUrl: thumbUrl,
+          thumbnailUrl: manualUrl,
           ioFileUrl: ioUrl,
           model3dUrl: glbUrl,
           partsJson: enrichedParts as any,
@@ -165,7 +157,10 @@ export async function modelsRoutes(app: FastifyInstance) {
       return reply.send({
         success: true,
         message: 'Model uploaded successfully',
-        data: model
+        data: {
+          ...model,
+          manualUrl: model.thumbnailUrl
+        }
       });
     } catch (error: any) {
       request.log.error({ error: error.message, stack: error.stack }, 'Model upload failed');

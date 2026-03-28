@@ -21,7 +21,10 @@ export async function modelQueryRoutes(app: FastifyInstance) {
       return reply.send({
         success: true,
         message: 'Models fetched successfully',
-        data: models
+        data: models.map((model) => ({
+          ...model,
+          manualUrl: model.thumbnailUrl
+        }))
       });
     } catch (error: any) {
       request.log.error({ error: error.message, stack: error.stack }, 'Fetch models failed');
@@ -70,7 +73,10 @@ export async function modelQueryRoutes(app: FastifyInstance) {
       return reply.send({
         success: true,
         message: 'Model fetched successfully',
-        data: model
+        data: {
+          ...model,
+          manualUrl: model.thumbnailUrl
+        }
       });
     } catch (error: any) {
       request.log.error({ error: error.message, stack: error.stack }, 'Fetch model detail failed');

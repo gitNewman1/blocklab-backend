@@ -263,6 +263,7 @@ function toResponseItem(item: ScoredMatch) {
     id: item.id,
     name: item.name,
     thumbnailUrl: item.thumbnailUrl,
+    manualUrl: item.thumbnailUrl,
     ioFileUrl: item.ioFileUrl,
     model3dUrl: item.model3dUrl,
     matchType: item.matchType,
