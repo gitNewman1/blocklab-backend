@@ -19,6 +19,7 @@ export async function modelsRoutes(app: FastifyInstance) {
       const parts = request.parts();
       const files: Record<string, UploadedFile> = {};
       let name = '';
+      let confirmDuplicate = false;
 
       for await (const part of parts) {
         if (part.type === 'file') {
@@ -34,6 +35,10 @@ export async function modelsRoutes(app: FastifyInstance) {
 
         if (part.fieldname === 'name') {
           name = String(part.value || '');
+        }
+        if (part.fieldname === 'confirm_duplicate') {
+          const raw = String(part.value || '').toLowerCase();
+          confirmDuplicate = raw === 'true' || raw === '1' || raw === 'yes';
         }
       }
 
@@ -63,6 +68,25 @@ export async function modelsRoutes(app: FastifyInstance) {
           success: false,
           message: 'thumbnail must be one of .jpg, .jpeg, .png, .webp',
           error: 'INVALID_THUMBNAIL_FILE'
+        });
+      }
+
+      const duplicateCount = await prisma.model.count({
+        where: { name }
+      });
+      if (duplicateCount > 0 && !confirmDuplicate) {
+        request.log.warn(
+          { modelName: name, duplicateCount },
+          'Duplicate model name detected, confirmation required'
+        );
+        return reply.code(409).send({
+          success: false,
+          message: 'Model name already exists, confirmation required',
+          error: 'DUPLICATE_MODEL_NAME',
+          data: {
+            modelName: name,
+            existingCount: duplicateCount
+          }
         });
       }
 

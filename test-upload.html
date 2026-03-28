@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -79,43 +79,70 @@
   <script>
     const API_URL = '/api/admin/models/upload';
 
-    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-
-      const submitBtn = document.getElementById('submitBtn');
+    function setResult(type, html) {
       const resultDiv = document.getElementById('result');
+      resultDiv.className = type;
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = html;
+    }
+
+    async function uploadModel({ confirmDuplicate = false }) {
       const nameInput = document.getElementById('name');
       const ioInput = document.getElementById('ioFile');
       const glbInput = document.getElementById('glbFile');
       const thumbnailInput = document.getElementById('thumbnail');
 
+      const formData = new FormData();
+      formData.append('name', nameInput.value);
+      formData.append('io_file', ioInput.files[0]);
+      formData.append('glb_file', glbInput.files[0]);
+      if (thumbnailInput.files[0]) {
+        formData.append('thumbnail', thumbnailInput.files[0]);
+      }
+      if (confirmDuplicate) {
+        formData.append('confirm_duplicate', 'true');
+      }
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        body: formData
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (_) {
+        throw new Error(`接口返回非 JSON（HTTP ${response.status}）`);
+      }
+
+      if (!response.ok || !data.success) {
+        const isDuplicate = response.status === 409 && data.error === 'DUPLICATE_MODEL_NAME';
+        if (isDuplicate && !confirmDuplicate) {
+          const existingCount = data?.data?.existingCount ?? '未知';
+          const msg = `已存在同名模型（${nameInput.value}），当前已有 ${existingCount} 条。是否继续上传？`;
+          const confirmed = window.confirm(msg);
+          if (!confirmed) {
+            throw new Error('你已取消上传');
+          }
+          return uploadModel({ confirmDuplicate: true });
+        }
+        throw new Error(data.message || `HTTP ${response.status}`);
+      }
+
+      return data;
+    }
+
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const submitBtn = document.getElementById('submitBtn');
       submitBtn.disabled = true;
       submitBtn.textContent = '上传中...';
-      resultDiv.className = 'loading';
-      resultDiv.style.display = 'block';
-      resultDiv.textContent = '正在上传文件，请稍候...';
+      setResult('loading', '正在上传文件，请稍候...');
 
       try {
-        const formData = new FormData();
-        formData.append('name', nameInput.value);
-        formData.append('io_file', ioInput.files[0]);
-        formData.append('glb_file', glbInput.files[0]);
-        if (thumbnailInput.files[0]) {
-          formData.append('thumbnail', thumbnailInput.files[0]);
-        }
-
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          body: formData
-        });
-
-        const data = await response.json();
-        if (!response.ok || !data.success) {
-          throw new Error(data.message || `HTTP ${response.status}`);
-        }
-
-        resultDiv.className = 'success';
-        resultDiv.innerHTML = `
+        const data = await uploadModel({ confirmDuplicate: false });
+        setResult('success', `
           <h3>上传成功</h3>
           <p><strong>模型 ID：</strong>${data.data.id}</p>
           <p><strong>模型名称：</strong>${data.data.name}</p>
@@ -123,13 +150,12 @@
           <p><strong>.glb 文件：</strong><a href="${data.data.model3dUrl}" target="_blank">${data.data.model3dUrl}</a></p>
           <p><strong>零件数量：</strong>${data.data.partsJson.length}</p>
           <p><strong>步骤数量：</strong>${data.data.stepsJson.length}</p>
-        `;
+        `);
       } catch (error) {
-        resultDiv.className = 'error';
-        resultDiv.innerHTML = `
+        setResult('error', `
           <h3>上传失败</h3>
           <p>错误信息：${error.message}</p>
-        `;
+        `);
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = '上传';
@@ -138,4 +164,3 @@
   </script>
 </body>
 </html>
-
