@@ -75,8 +75,32 @@
     }
 
     .card h3 {
-      margin: 0 0 8px;
+      margin: 0;
       font-size: 14px;
+    }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .card-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .api-tag {
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 12px;
+      color: #334155;
+      background: #fff;
+      white-space: nowrap;
     }
 
     .api-row {
@@ -228,26 +252,25 @@
         <h2>右侧：接口调用测试</h2>
 
         <div class="card">
-          <h3>获取指定模型</h3>
+          <div class="card-head">
+            <h3>获取指定模型</h3>
+            <div class="card-tools">
+              <button type="button" id="btnGetById">调用 GET /api/models/:id</button>
+            </div>
+          </div>
           <div class="api-row">
             <div class="form-group">
               <label for="modelIdInput">模型 ID</label>
               <input type="number" id="modelIdInput" min="1" placeholder="例如：1">
             </div>
-            <div class="btn-row">
-              <button type="button" id="btnGetById">调用 GET /api/models/:id</button>
-            </div>
           </div>
         </div>
 
         <div class="card">
-          <h3>获取所有模型</h3>
-          <div class="api-row">
-            <div class="form-group">
-              <label>模型列表</label>
-              <input type="text" value="直接调用 /api/models" disabled>
-            </div>
-            <div class="btn-row">
+          <div class="card-head">
+            <h3>获取所有模型</h3>
+            <div class="card-tools">
+              <span class="api-tag">/api/models</span>
               <button type="button" id="btnGetAll">调用 GET /api/models</button>
             </div>
           </div>
