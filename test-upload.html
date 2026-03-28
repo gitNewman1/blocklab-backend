@@ -86,7 +86,7 @@
       resultDiv.innerHTML = html;
     }
 
-    async function uploadModel({ confirmDuplicate = false }) {
+    async function uploadModel({ confirmDuplicate = false, confirmExactMatch = false }) {
       const nameInput = document.getElementById('name');
       const ioInput = document.getElementById('ioFile');
       const glbInput = document.getElementById('glbFile');
@@ -101,6 +101,9 @@
       }
       if (confirmDuplicate) {
         formData.append('confirm_duplicate', 'true');
+      }
+      if (confirmExactMatch) {
+        formData.append('confirm_exact_match', 'true');
       }
 
       const response = await fetch(API_URL, {
@@ -117,6 +120,7 @@
 
       if (!response.ok || !data.success) {
         const isDuplicate = response.status === 409 && data.error === 'DUPLICATE_MODEL_NAME';
+        const isExactMatch = response.status === 409 && data.error === 'DUPLICATE_PARTS_MATCH';
         if (isDuplicate && !confirmDuplicate) {
           const existingCount = data?.data?.existingCount ?? '未知';
           const msg = `已存在同名模型（${nameInput.value}），当前已有 ${existingCount} 条。是否继续上传？`;
@@ -124,7 +128,22 @@
           if (!confirmed) {
             throw new Error('你已取消上传');
           }
-          return uploadModel({ confirmDuplicate: true });
+          return uploadModel({ confirmDuplicate: true, confirmExactMatch });
+        }
+        if (isExactMatch && !confirmExactMatch) {
+          const matchedCount = data?.data?.matchedCount ?? 0;
+          const matchedModels = Array.isArray(data?.data?.matchedModels) ? data.data.matchedModels : [];
+          const modelPreview = matchedModels
+            .map((m) => `#${m.id} ${m.name}`)
+            .join('\n');
+          const msg = `检测到零件类型和数量与现有模型完全一致（共 ${matchedCount} 条）。是否继续上传？${
+            modelPreview ? `\n\n匹配模型：\n${modelPreview}` : ''
+          }`;
+          const confirmed = window.confirm(msg);
+          if (!confirmed) {
+            throw new Error('你已取消上传');
+          }
+          return uploadModel({ confirmDuplicate, confirmExactMatch: true });
         }
         throw new Error(data.message || `HTTP ${response.status}`);
       }
@@ -141,7 +160,7 @@
       setResult('loading', '正在上传文件，请稍候...');
 
       try {
-        const data = await uploadModel({ confirmDuplicate: false });
+        const data = await uploadModel({ confirmDuplicate: false, confirmExactMatch: false });
         setResult('success', `
           <h3>上传成功</h3>
           <p><strong>模型 ID：</strong>${data.data.id}</p>

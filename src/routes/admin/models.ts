@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { LocalStorageService } from '../../services/local-storage.service';
 import { IOParserService } from '../../services/io-parser.service';
 import { RebrickableService } from '../../services/rebrickable.service';
-import { UploadedFile } from '../../types';
+import { Part, UploadedFile } from '../../types';
 
 const prisma = new PrismaClient();
 const storageService = new LocalStorageService();
@@ -20,6 +20,7 @@ export async function modelsRoutes(app: FastifyInstance) {
       const files: Record<string, UploadedFile> = {};
       let name = '';
       let confirmDuplicate = false;
+      let confirmExactMatch = false;
 
       for await (const part of parts) {
         if (part.type === 'file') {
@@ -39,6 +40,10 @@ export async function modelsRoutes(app: FastifyInstance) {
         if (part.fieldname === 'confirm_duplicate') {
           const raw = String(part.value || '').toLowerCase();
           confirmDuplicate = raw === 'true' || raw === '1' || raw === 'yes';
+        }
+        if (part.fieldname === 'confirm_exact_match') {
+          const raw = String(part.value || '').toLowerCase();
+          confirmExactMatch = raw === 'true' || raw === '1' || raw === 'yes';
         }
       }
 
@@ -90,12 +95,6 @@ export async function modelsRoutes(app: FastifyInstance) {
         });
       }
 
-      const [ioUrl, glbUrl, thumbUrl] = await Promise.all([
-        storageService.uploadFile(files.io_file, 'io-files'),
-        storageService.uploadFile(files.glb_file, 'models-3d'),
-        files.thumbnail ? storageService.uploadFile(files.thumbnail, 'thumbnails') : Promise.resolve(null)
-      ]);
-
       const parsed = await ioParserService.parseIOFileBuffer(files.io_file.data);
       request.log.info(
         {
@@ -104,6 +103,34 @@ export async function modelsRoutes(app: FastifyInstance) {
         },
         'IO parsing completed'
       );
+
+      const exactMatches = await findExactPartMatches(parsed.parts, request.log);
+      if (exactMatches.length > 0 && !confirmExactMatch) {
+        request.log.warn(
+          {
+            modelName: name,
+            exactMatchCount: exactMatches.length,
+            matchedModelIds: exactMatches.slice(0, 10).map((m) => m.id)
+          },
+          'Exact parts match detected, confirmation required'
+        );
+        return reply.code(409).send({
+          success: false,
+          message: 'Exact parts match exists, confirmation required',
+          error: 'DUPLICATE_PARTS_MATCH',
+          data: {
+            modelName: name,
+            matchedCount: exactMatches.length,
+            matchedModels: exactMatches.slice(0, 5)
+          }
+        });
+      }
+
+      const [ioUrl, glbUrl, thumbUrl] = await Promise.all([
+        storageService.uploadFile(files.io_file, 'io-files'),
+        storageService.uploadFile(files.glb_file, 'models-3d'),
+        files.thumbnail ? storageService.uploadFile(files.thumbnail, 'thumbnails') : Promise.resolve(null)
+      ]);
 
       const enrichedParts = await rebrickableService.enrichParts(parsed.parts, request.log);
       const partsWithoutName = enrichedParts.filter((part) => !part.name).length;
@@ -154,4 +181,93 @@ function hasOneOfExtensions(filename: string, exts: Set<string>): boolean {
     }
   }
   return false;
+}
+
+async function findExactPartMatches(
+  uploadedParts: Part[],
+  logger: FastifyInstance['log']
+): Promise<Array<{ id: number; name: string }>> {
+  const uploadSignature = buildPartsSignature(uploadedParts);
+  if (!uploadSignature) {
+    logger.warn('Uploaded parts signature is empty, skip exact match check');
+    return [];
+  }
+
+  const existingModels = await prisma.model.findMany({
+    select: {
+      id: true,
+      name: true,
+      partsJson: true
+    }
+  });
+
+  const matchedModels: Array<{ id: number; name: string }> = [];
+  for (const model of existingModels) {
+    const existingParts = extractPartsFromJson(model.partsJson);
+    const existingSignature = buildPartsSignature(existingParts);
+    if (existingSignature && existingSignature === uploadSignature) {
+      matchedModels.push({ id: model.id, name: model.name });
+    }
+  }
+
+  logger.info(
+    {
+      comparedModelCount: existingModels.length,
+      matchedCount: matchedModels.length
+    },
+    'Exact parts match check completed'
+  );
+
+  return matchedModels;
+}
+
+function extractPartsFromJson(partsJson: unknown): Part[] {
+  if (!Array.isArray(partsJson)) {
+    return [];
+  }
+
+  const parts: Part[] = [];
+  for (const item of partsJson) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+
+    const raw = item as Record<string, unknown>;
+    const designID = typeof raw.designID === 'string' ? raw.designID : '';
+    const quantity =
+      typeof raw.quantity === 'number'
+        ? raw.quantity
+        : Number.isFinite(Number(raw.quantity))
+        ? Number(raw.quantity)
+        : 0;
+    if (!designID || quantity <= 0) {
+      continue;
+    }
+
+    parts.push({
+      id: typeof raw.id === 'string' ? raw.id : designID,
+      designID,
+      quantity,
+      colorID: typeof raw.colorID === 'string' ? raw.colorID : undefined,
+      name: typeof raw.name === 'string' ? raw.name : undefined
+    });
+  }
+  return parts;
+}
+
+function buildPartsSignature(parts: Part[]): string {
+  const countByDesignId = new Map<string, number>();
+  for (const part of parts) {
+    const designId = (part.designID || '').trim();
+    const quantity = Number(part.quantity) || 0;
+    if (!designId || quantity <= 0) {
+      continue;
+    }
+    countByDesignId.set(designId, (countByDesignId.get(designId) || 0) + quantity);
+  }
+
+  return Array.from(countByDesignId.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([designId, quantity]) => `${designId}:${quantity}`)
+    .join('|');
 }
