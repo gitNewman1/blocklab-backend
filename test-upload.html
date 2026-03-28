@@ -103,6 +103,13 @@
       white-space: nowrap;
     }
 
+    .api-inline {
+      font-size: 13px;
+      color: #334155;
+      font-weight: normal;
+      margin-left: 4px;
+    }
+
     .api-row {
       display: flex;
       gap: 8px;
@@ -253,9 +260,9 @@
 
         <div class="card">
           <div class="card-head">
-            <h3>获取指定模型</h3>
+            <h3>获取指定模型：<span class="api-inline">/api/models/:id</span></h3>
             <div class="card-tools">
-              <button type="button" id="btnGetById">调用 GET /api/models/:id</button>
+              <button type="button" id="btnGetById">调用 GET</button>
             </div>
           </div>
           <div class="api-row">
@@ -268,10 +275,9 @@
 
         <div class="card">
           <div class="card-head">
-            <h3>获取所有模型</h3>
+            <h3>获取所有模型：<span class="api-inline">/api/models</span></h3>
             <div class="card-tools">
-              <span class="api-tag">/api/models</span>
-              <button type="button" id="btnGetAll">调用 GET /api/models</button>
+              <button type="button" id="btnGetAll">调用 GET</button>
             </div>
           </div>
         </div>
