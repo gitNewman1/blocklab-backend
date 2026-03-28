@@ -99,7 +99,8 @@ export async function modelsRoutes(app: FastifyInstance) {
       request.log.info(
         {
           parsedPartsCount: parsed.parts.length,
-          parsedStepsCount: parsed.steps.length
+          parsedStepsCount: parsed.steps.length,
+          ioThumbnailExtracted: !!parsed.extractedThumbnail
         },
         'IO parsing completed'
       );
@@ -126,10 +127,18 @@ export async function modelsRoutes(app: FastifyInstance) {
         });
       }
 
+      const thumbnailFile = files.thumbnail || parsed.extractedThumbnail;
+      const thumbnailSource = files.thumbnail
+        ? 'request'
+        : parsed.extractedThumbnail
+        ? 'io_embedded'
+        : 'none';
+      request.log.info({ thumbnailSource }, 'Resolved thumbnail source');
+
       const [ioUrl, glbUrl, thumbUrl] = await Promise.all([
         storageService.uploadFile(files.io_file, 'io-files'),
         storageService.uploadFile(files.glb_file, 'models-3d'),
-        files.thumbnail ? storageService.uploadFile(files.thumbnail, 'thumbnails') : Promise.resolve(null)
+        thumbnailFile ? storageService.uploadFile(thumbnailFile, 'thumbnails') : Promise.resolve(null)
       ]);
 
       const enrichedParts = await rebrickableService.enrichParts(parsed.parts, request.log);

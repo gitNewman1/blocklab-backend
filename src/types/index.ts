@@ -1,6 +1,7 @@
 export interface ParsedIOFile {
   parts: Part[];
   steps: Step[];
+  extractedThumbnail?: UploadedFile;
 }
 
 export interface Part {

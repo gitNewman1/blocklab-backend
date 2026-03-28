@@ -1,6 +1,6 @@
 import { parseString } from 'xml2js';
 import AdmZip from 'adm-zip';
-import { ParsedIOFile, Part, Step } from '../types';
+import { ParsedIOFile, Part, Step, UploadedFile } from '../types';
 
 export class IOParserService {
   async parseIOFileBuffer(buffer: Buffer): Promise<ParsedIOFile> {
@@ -55,7 +55,12 @@ export class IOParserService {
     }
 
     const ldrawContent = target.getData().toString('utf-8');
-    return this.parseLDrawText(ldrawContent);
+    const parsed = this.parseLDrawText(ldrawContent);
+    const extractedThumbnail = this.extractThumbnailFromEntries(entries);
+    return {
+      ...parsed,
+      extractedThumbnail
+    };
   }
 
   private findLDrawEntry(entries: any[]): any | null {
@@ -68,6 +73,52 @@ export class IOParserService {
     }
 
     return entries.find((entry) => /\.(ldr|io|mpd)$/i.test(entry.entryName)) || null;
+  }
+
+  private extractThumbnailFromEntries(entries: any[]): UploadedFile | undefined {
+    const imageEntry = this.findThumbnailEntry(entries);
+    if (!imageEntry) {
+      return undefined;
+    }
+
+    const filename = imageEntry.entryName.split('/').pop() || imageEntry.entryName;
+    const lower = filename.toLowerCase();
+    const mimetype = lower.endsWith('.png')
+      ? 'image/png'
+      : lower.endsWith('.jpg') || lower.endsWith('.jpeg')
+      ? 'image/jpeg'
+      : lower.endsWith('.webp')
+      ? 'image/webp'
+      : 'application/octet-stream';
+
+    return {
+      filename,
+      mimetype,
+      encoding: 'binary',
+      data: imageEntry.getData()
+    };
+  }
+
+  private findThumbnailEntry(entries: any[]): any | null {
+    const preferredPatterns = [
+      /(^|\/)thumbnail\.(png|jpg|jpeg|webp)$/i,
+      /(^|\/)thumb\.(png|jpg|jpeg|webp)$/i
+    ];
+
+    for (const pattern of preferredPatterns) {
+      const found = entries.find((entry) => pattern.test(entry.entryName));
+      if (found) {
+        return found;
+      }
+    }
+
+    return (
+      entries.find(
+        (entry) =>
+          /\.(png|jpg|jpeg|webp)$/i.test(entry.entryName) &&
+          /thumb|thumbnail/i.test(entry.entryName)
+      ) || null
+    );
   }
 
   private parseLDrawText(content: string): ParsedIOFile {
