@@ -138,12 +138,21 @@
 
     input[type="text"],
     input[type="number"],
-    input[type="file"] {
+    input[type="file"],
+    textarea {
       width: 100%;
       padding: 8px;
       border: 1px solid var(--border);
       border-radius: 4px;
       background: #fff;
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      font-family: Consolas, Menlo, monospace;
+      font-size: 12px;
+      line-height: 1.45;
     }
 
     .btn-row {
@@ -282,6 +291,24 @@
           </div>
         </div>
 
+        <div class="card">
+          <div class="card-head">
+            <h3>匹配模型：<span class="api-inline">/api/recognition/match</span></h3>
+            <div class="card-tools">
+              <button type="button" id="btnMatchModels">调用 POST</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="matchPayloadInput">请求 JSON（零件名称+数量）</label>
+            <textarea id="matchPayloadInput">{
+  "parts": [
+    { "name": "Brick 2 x 4", "quantity": 4 },
+    { "name": "Plate 2 x 2", "quantity": 2 }
+  ]
+}</textarea>
+          </div>
+        </div>
+
         <div id="apiStatus" class="status"></div>
         <div class="json-title">接口返回 JSON</div>
         <pre id="apiJsonOutput" class="json-box">{}</pre>
@@ -292,6 +319,7 @@
   <script>
     const API_UPLOAD_URL = '/api/admin/models/upload';
     const API_MODELS_URL = '/api/models';
+    const API_RECOGNITION_MATCH_URL = '/api/recognition/match';
 
     function setStatus(el, type, text) {
       el.className = `status ${type}`;
@@ -422,6 +450,40 @@
       }
     }
 
+    async function callPostApi(url, payload) {
+      const statusEl = document.getElementById('apiStatus');
+      setStatus(statusEl, 'loading', `请求中：POST ${url}`);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (_) {
+          throw new Error(`接口返回非 JSON（HTTP ${response.status}）`);
+        }
+
+        setJsonOutput(data);
+
+        if (!response.ok || data.success === false) {
+          setStatus(statusEl, 'error', `请求失败（HTTP ${response.status}）`);
+          return;
+        }
+
+        setStatus(statusEl, 'success', `请求成功（HTTP ${response.status}）`);
+      } catch (error) {
+        setJsonOutput({ success: false, message: error.message });
+        setStatus(statusEl, 'error', `请求失败\n错误信息：${error.message}`);
+      }
+    }
+
     document.getElementById('btnGetById').addEventListener('click', async () => {
       const idVal = document.getElementById('modelIdInput').value;
       const modelId = Number(idVal);
@@ -435,6 +497,17 @@
 
     document.getElementById('btnGetAll').addEventListener('click', async () => {
       await callApi(API_MODELS_URL);
+    });
+
+    document.getElementById('btnMatchModels').addEventListener('click', async () => {
+      const input = document.getElementById('matchPayloadInput').value;
+      try {
+        const payload = JSON.parse(input);
+        await callPostApi(API_RECOGNITION_MATCH_URL, payload);
+      } catch (error) {
+        const statusEl = document.getElementById('apiStatus');
+        setStatus(statusEl, 'error', `请求 JSON 解析失败\n错误信息：${error.message}`);
+      }
     });
   </script>
 </body>
