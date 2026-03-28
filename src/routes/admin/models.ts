@@ -2,11 +2,13 @@ import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { LocalStorageService } from '../../services/local-storage.service';
 import { IOParserService } from '../../services/io-parser.service';
+import { RebrickableService } from '../../services/rebrickable.service';
 import { UploadedFile } from '../../types';
 
 const prisma = new PrismaClient();
 const storageService = new LocalStorageService();
 const ioParserService = new IOParserService();
+const rebrickableService = new RebrickableService();
 const allowedThumbnailExts = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 export async function modelsRoutes(app: FastifyInstance) {
@@ -71,6 +73,23 @@ export async function modelsRoutes(app: FastifyInstance) {
       ]);
 
       const parsed = await ioParserService.parseIOFileBuffer(files.io_file.data);
+      request.log.info(
+        {
+          parsedPartsCount: parsed.parts.length,
+          parsedStepsCount: parsed.steps.length
+        },
+        'IO parsing completed'
+      );
+
+      const enrichedParts = await rebrickableService.enrichParts(parsed.parts, request.log);
+      const partsWithoutName = enrichedParts.filter((part) => !part.name).length;
+      request.log.info(
+        {
+          enrichedPartsCount: enrichedParts.length,
+          partsWithoutName
+        },
+        'Rebrickable enrichment completed'
+      );
 
       const model = await prisma.model.create({
         data: {
@@ -78,7 +97,7 @@ export async function modelsRoutes(app: FastifyInstance) {
           thumbnailUrl: thumbUrl,
           ioFileUrl: ioUrl,
           model3dUrl: glbUrl,
-          partsJson: parsed.parts as any,
+          partsJson: enrichedParts as any,
           stepsJson: parsed.steps as any
         }
       });
