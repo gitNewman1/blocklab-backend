@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { modelsRoutes } from './routes/admin/models';
+import { modelMatchingRoutes } from './routes/models/matching';
 import { config } from './config';
 
 export async function buildApp() {
@@ -21,6 +22,7 @@ export async function buildApp() {
   });
 
   await app.register(modelsRoutes, { prefix: '/api/admin/models' });
+  await app.register(modelMatchingRoutes, { prefix: '/api/models' });
 
   return app;
 }
