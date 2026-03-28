@@ -258,6 +258,8 @@ function sortByRule(a: ScoredMatch, b: ScoredMatch): number {
 }
 
 function toResponseItem(item: ScoredMatch) {
+  const similarity = Number(item.similarity.toFixed(6));
+  const score = Number((item.similarity * 100).toFixed(2));
   return {
     id: item.id,
     name: item.name,
@@ -265,6 +267,7 @@ function toResponseItem(item: ScoredMatch) {
     ioFileUrl: item.ioFileUrl,
     model3dUrl: item.model3dUrl,
     matchType: item.matchType,
-    similarity: Number(item.similarity.toFixed(6))
+    similarity,
+    score
   };
 }
