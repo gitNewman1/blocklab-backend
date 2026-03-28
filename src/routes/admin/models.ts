@@ -127,9 +127,11 @@ export async function modelsRoutes(app: FastifyInstance) {
         });
       }
 
-      const [ioUrl, glbUrl, manualUrl] = await Promise.all([
+      const thumbnailFile = parsed.extractedThumbnail;
+      const [ioUrl, glbUrl, thumbUrl, manualUrl] = await Promise.all([
         storageService.uploadFile(files.io_file, 'io-files'),
         storageService.uploadFile(files.glb_file, 'models-3d'),
+        thumbnailFile ? storageService.uploadFile(thumbnailFile, 'thumbnails') : Promise.resolve(null),
         files.manual_file ? storageService.uploadFile(files.manual_file, 'manuals') : Promise.resolve(null)
       ]);
 
@@ -146,7 +148,8 @@ export async function modelsRoutes(app: FastifyInstance) {
       const model = await prisma.model.create({
         data: {
           name,
-          thumbnailUrl: manualUrl,
+          thumbnailUrl: thumbUrl,
+          manualUrl,
           ioFileUrl: ioUrl,
           model3dUrl: glbUrl,
           partsJson: enrichedParts as any,
@@ -157,10 +160,7 @@ export async function modelsRoutes(app: FastifyInstance) {
       return reply.send({
         success: true,
         message: 'Model uploaded successfully',
-        data: {
-          ...model,
-          manualUrl: model.thumbnailUrl
-        }
+        data: model
       });
     } catch (error: any) {
       request.log.error({ error: error.message, stack: error.stack }, 'Model upload failed');

@@ -12,6 +12,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
           id: true,
           name: true,
           thumbnailUrl: true,
+          manualUrl: true,
           ioFileUrl: true,
           model3dUrl: true,
           createdAt: true
@@ -21,10 +22,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
       return reply.send({
         success: true,
         message: 'Models fetched successfully',
-        data: models.map((model) => ({
-          ...model,
-          manualUrl: model.thumbnailUrl
-        }))
+        data: models
       });
     } catch (error: any) {
       request.log.error({ error: error.message, stack: error.stack }, 'Fetch models failed');
@@ -54,6 +52,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
           id: true,
           name: true,
           thumbnailUrl: true,
+          manualUrl: true,
           ioFileUrl: true,
           model3dUrl: true,
           partsJson: true,
@@ -73,10 +72,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
       return reply.send({
         success: true,
         message: 'Model fetched successfully',
-        data: {
-          ...model,
-          manualUrl: model.thumbnailUrl
-        }
+        data: model
       });
     } catch (error: any) {
       request.log.error({ error: error.message, stack: error.stack }, 'Fetch model detail failed');

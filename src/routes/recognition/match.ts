@@ -12,6 +12,7 @@ type ModelVector = {
   id: number;
   name: string;
   thumbnailUrl: string | null;
+  manualUrl: string | null;
   ioFileUrl: string;
   model3dUrl: string;
   vector: Map<string, number>;
@@ -21,6 +22,7 @@ type ScoredMatch = {
   id: number;
   name: string;
   thumbnailUrl: string | null;
+  manualUrl: string | null;
   ioFileUrl: string;
   model3dUrl: string;
   matchType: 'exact' | 'fuzzy';
@@ -53,6 +55,7 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
           id: true,
           name: true,
           thumbnailUrl: true,
+          manualUrl: true,
           ioFileUrl: true,
           model3dUrl: true,
           partsJson: true
@@ -64,6 +67,7 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
           id: model.id,
           name: model.name,
           thumbnailUrl: model.thumbnailUrl,
+          manualUrl: model.manualUrl,
           ioFileUrl: model.ioFileUrl,
           model3dUrl: model.model3dUrl,
           vector: buildVector(extractNameQuantityFromPartsJson(model.partsJson))
@@ -76,6 +80,7 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
           id: model.id,
           name: model.name,
           thumbnailUrl: model.thumbnailUrl,
+          manualUrl: model.manualUrl,
           ioFileUrl: model.ioFileUrl,
           model3dUrl: model.model3dUrl,
           matchType: 'exact' as const,
@@ -109,6 +114,7 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
           id: model.id,
           name: model.name,
           thumbnailUrl: model.thumbnailUrl,
+          manualUrl: model.manualUrl,
           ioFileUrl: model.ioFileUrl,
           model3dUrl: model.model3dUrl,
           matchType,
@@ -263,7 +269,7 @@ function toResponseItem(item: ScoredMatch) {
     id: item.id,
     name: item.name,
     thumbnailUrl: item.thumbnailUrl,
-    manualUrl: item.thumbnailUrl,
+    manualUrl: item.manualUrl,
     ioFileUrl: item.ioFileUrl,
     model3dUrl: item.model3dUrl,
     matchType: item.matchType,
