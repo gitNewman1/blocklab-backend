@@ -8,45 +8,22 @@ type InputPart = {
   quantity: number;
 };
 
-export async function modelMatchingRoutes(app: FastifyInstance) {
-  app.post('/match-by-parts', async (request, reply) => {
+export async function recognitionMatchRoutes(app: FastifyInstance) {
+  app.post('/match', async (request, reply) => {
     try {
-      const body = request.body as { parts?: unknown };
-      const rawParts = Array.isArray(body?.parts) ? body.parts : null;
-      if (!rawParts || rawParts.length === 0) {
+      const inputParts = parseInputParts((request.body as { parts?: unknown })?.parts);
+      if (inputParts.length === 0) {
         return reply.code(400).send({
           success: false,
-          message: 'parts is required and must be a non-empty array',
+          message: 'parts is required and each item needs a valid name/class and quantity > 0',
           error: 'INVALID_PARTS_PAYLOAD'
         });
       }
 
-      const inputParts: InputPart[] = [];
-      for (const item of rawParts) {
-        if (!item || typeof item !== 'object') {
-          return reply.code(400).send({
-            success: false,
-            message: 'each part must be an object: { name, quantity }',
-            error: 'INVALID_PART_ITEM'
-          });
-        }
-        const part = item as Record<string, unknown>;
-        const name = String(part.name || '').trim();
-        const quantity = Number(part.quantity || 0);
-        if (!name || !Number.isFinite(quantity) || quantity <= 0) {
-          return reply.code(400).send({
-            success: false,
-            message: 'each part requires valid name and quantity > 0',
-            error: 'INVALID_PART_ITEM'
-          });
-        }
-        inputParts.push({ name, quantity });
-      }
-
       const requestSignature = buildNameQuantitySignature(inputParts);
       request.log.info(
-        { requestPartCount: inputParts.length, requestSignature },
-        'Start matching models by part-name and quantity'
+        { requestPartCount: inputParts.length },
+        'Start recognition match by part-name and quantity'
       );
 
       const models = await prisma.model.findMany({
@@ -71,27 +48,22 @@ export async function modelMatchingRoutes(app: FastifyInstance) {
           totalModelsCompared: models.length,
           matchedCount: matched.length
         },
-        'Finished matching models by part-name and quantity'
+        'Finished recognition match'
       );
 
       return reply.send({
         success: true,
-        message: 'Model matching completed',
+        message: 'Recognition matching completed',
         data: matched.map((model) => ({
           id: model.id,
           name: model.name,
           thumbnailUrl: model.thumbnailUrl,
-          downloadPaths: {
-            ioFileUrl: model.ioFileUrl,
-            model3dUrl: model.model3dUrl
-          }
+          ioFileUrl: model.ioFileUrl,
+          model3dUrl: model.model3dUrl
         }))
       });
     } catch (error: any) {
-      request.log.error(
-        { error: error.message, stack: error.stack },
-        'Match-by-parts request failed'
-      );
+      request.log.error({ error: error.message, stack: error.stack }, 'Recognition match failed');
       return reply.code(500).send({
         success: false,
         message: error.message,
@@ -99,6 +71,34 @@ export async function modelMatchingRoutes(app: FastifyInstance) {
       });
     }
   });
+}
+
+function parseInputParts(parts: unknown): InputPart[] {
+  if (!Array.isArray(parts)) {
+    return [];
+  }
+
+  const out: InputPart[] = [];
+  for (const item of parts) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+
+    const part = item as Record<string, unknown>;
+    const nameRaw = String(part.name || part.class || '').trim();
+    const quantityRaw = part.quantity ?? 1;
+    const quantity = Number(quantityRaw);
+    if (!nameRaw || !Number.isFinite(quantity) || quantity <= 0) {
+      continue;
+    }
+
+    out.push({
+      name: nameRaw,
+      quantity
+    });
+  }
+
+  return out;
 }
 
 function extractNameQuantityFromPartsJson(partsJson: unknown): InputPart[] {
