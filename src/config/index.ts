@@ -7,6 +7,7 @@ const parsedPort = parseInt(process.env.PORT || '3000', 10);
 const parsedMaxFileSizeMb = parseInt(process.env.MAX_FILE_SIZE_MB || '50', 10);
 const parsedRebrickableTimeoutMs = parseInt(process.env.REBRICKABLE_TIMEOUT_MS || '8000', 10);
 const parsedRebrickableBatchSize = parseInt(process.env.REBRICKABLE_BATCH_SIZE || '80', 10);
+const parsedRoboflowTimeoutMs = parseInt(process.env.ROBOFLOW_TIMEOUT_MS || '12000', 10);
 
 export const config = {
   port: Number.isFinite(parsedPort) ? parsedPort : 3000,
@@ -24,5 +25,12 @@ export const config = {
     baseUrl: process.env.REBRICKABLE_BASE_URL || 'https://rebrickable.com/api/v3',
     timeoutMs: Number.isFinite(parsedRebrickableTimeoutMs) ? parsedRebrickableTimeoutMs : 8000,
     batchSize: Number.isFinite(parsedRebrickableBatchSize) ? parsedRebrickableBatchSize : 80
+  },
+  roboflow: {
+    apiKey: process.env.API_KEY || '',
+    workflowUrl:
+      process.env.ROBOFLOW_WORKFLOW_URL ||
+      'https://serverless.roboflow.com/blocks-mdc9p/workflows/blocklab',
+    timeoutMs: Number.isFinite(parsedRoboflowTimeoutMs) ? parsedRoboflowTimeoutMs : 12000
   }
 };

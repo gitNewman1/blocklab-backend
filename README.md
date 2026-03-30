@@ -53,10 +53,29 @@ Required fields:
 - `glb_file`: `.glb` file
 
 Optional fields:
-- `thumbnail`: image file
+- `manual_file`: pdf file
+
+### Image recognition and model match
+`POST /api/recognition/image-match`
+
+Supports:
+- `application/json` with `image_url`
+- `multipart/form-data` with `image_url` or `image_file` (only one)
+
+Optional params:
+- `min_confidence` (0-1, default `0.6`)
+- `top_k` (default `4`)
+
+Response includes:
+- `recognizedParts` (aggregated classes and quantities from Roboflow)
+- `matches` (model candidates with score)
 
 ## Local File Storage
 - Default upload root: `./uploads`
 - Returned file URL format: `{PUBLIC_BASE_URL}/static/{folder}/{filename}`
 - Production should expose `uploads/` via Nginx `/static/` mapping.
 
+## Roboflow
+- `API_KEY` is used for Roboflow workflow authentication.
+- `ROBOFLOW_WORKFLOW_URL` default:
+  - `https://serverless.roboflow.com/blocks-mdc9p/workflows/blocklab`
