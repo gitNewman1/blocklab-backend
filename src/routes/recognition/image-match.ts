@@ -46,6 +46,27 @@ type Detection = {
   detectionId?: string;
 };
 
+type ModelDetailResponse = {
+  id: number;
+  name: string;
+  thumbnailUrl: string | null;
+  manualUrl: string | null;
+  ioFileUrl: string;
+  model3dUrl: string;
+  partsJson: unknown;
+  stepsJson: unknown;
+  resolvedSteps: Array<{
+    step: number;
+    parts: Array<{
+      refId: string;
+      designID?: string;
+      name?: string;
+      colorID?: string;
+      quantityInModel?: number;
+    }>;
+  }>;
+};
+
 export async function recognitionImageMatchRoutes(app: FastifyInstance) {
   app.post('/image-match', async (request, reply) => {
     try {
@@ -68,6 +89,7 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
       const imageUrl = parsedInput.imageUrl.trim();
       const topK = clampPositiveInt(parsedInput.topK, 4, 20);
       const minConfidence = clampFloat(parsedInput.minConfidence, 0.6, 0, 1);
+      const includeModelDetail = !!parsedInput.includeModelDetail;
       if (!/^https?:\/\//i.test(imageUrl)) {
         return reply.code(400).send({
           success: false,
@@ -87,6 +109,7 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
           data: {
             imageUrl,
             minConfidence,
+            includeModelDetail,
             recognizedParts: [],
             matches: []
           }
@@ -163,15 +186,49 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
         matches = fuzzyMatches.slice(0, topK);
       }
 
+      const responseData: {
+        imageUrl: string;
+        minConfidence: number;
+        includeModelDetail: boolean;
+        recognizedParts: RecognizedPart[];
+        matches: ReturnType<typeof toResponseItem>[];
+        modelDetail?: ModelDetailResponse;
+      } = {
+        imageUrl,
+        minConfidence,
+        includeModelDetail,
+        recognizedParts,
+        matches: matches.map(toResponseItem)
+      };
+
+      if (includeModelDetail && matches.length > 0) {
+        const bestMatchId = matches[0].id;
+        const bestModel = await prisma.model.findUnique({
+          where: { id: bestMatchId },
+          select: {
+            id: true,
+            name: true,
+            thumbnailUrl: true,
+            manualUrl: true,
+            ioFileUrl: true,
+            model3dUrl: true,
+            partsJson: true,
+            stepsJson: true
+          }
+        });
+
+        if (bestModel) {
+          responseData.modelDetail = {
+            ...bestModel,
+            resolvedSteps: buildResolvedSteps(bestModel.partsJson, bestModel.stepsJson)
+          };
+        }
+      }
+
       return reply.send({
         success: true,
         message: 'Image recognition matching completed',
-        data: {
-          imageUrl,
-          minConfidence,
-          recognizedParts,
-          matches: matches.map(toResponseItem)
-        }
+        data: responseData
       });
     } catch (error: any) {
       const message = String(error?.message || 'Image recognition match failed');
@@ -202,6 +259,7 @@ async function parseImageInput(
   hasBothInputs?: boolean;
   minConfidence?: number;
   topK?: number;
+  includeModelDetail?: boolean;
 }> {
   const isMultipart = typeof request.isMultipart === 'function' && request.isMultipart();
   if (!isMultipart) {
@@ -210,7 +268,8 @@ async function parseImageInput(
     return {
       imageUrl,
       minConfidence: toMaybeNumber(body.min_confidence),
-      topK: toMaybeInt(body.top_k)
+      topK: toMaybeInt(body.top_k),
+      includeModelDetail: toBooleanFlag(body.include_model_detail)
     };
   }
 
@@ -219,6 +278,7 @@ async function parseImageInput(
   let imageFile: UploadedFile | null = null;
   let minConfidence: number | undefined;
   let topK: number | undefined;
+  let includeModelDetail = false;
 
   for await (const part of parts) {
     if (part.type === 'file' && part.fieldname === 'image_file') {
@@ -243,6 +303,9 @@ async function parseImageInput(
     if (part.type === 'field' && part.fieldname === 'top_k') {
       topK = toMaybeInt(part.value);
     }
+    if (part.type === 'field' && part.fieldname === 'include_model_detail') {
+      includeModelDetail = toBooleanFlag(part.value);
+    }
   }
 
   if (imageUrl && imageFile) {
@@ -251,10 +314,10 @@ async function parseImageInput(
 
   if (imageFile) {
     const imageUrlFromUpload = await storageService.uploadFile(imageFile, 'recognition-images');
-    return { imageUrl: imageUrlFromUpload, minConfidence, topK };
+    return { imageUrl: imageUrlFromUpload, minConfidence, topK, includeModelDetail };
   }
 
-  return { imageUrl, minConfidence, topK };
+  return { imageUrl, minConfidence, topK, includeModelDetail };
 }
 
 function extractDetectionsFromRoboflowResult(raw: unknown): Detection[] {
@@ -555,4 +618,75 @@ function isSupportedImageFile(filename: string, mimetype: string): boolean {
     return true;
   }
   return mimetype.startsWith('image/');
+}
+
+function toBooleanFlag(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const raw = String(value || '').trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+function buildResolvedSteps(partsJson: unknown, stepsJson: unknown): ModelDetailResponse['resolvedSteps'] {
+  const partsById = new Map<
+    string,
+    {
+      designID?: string;
+      name?: string;
+      colorID?: string;
+      quantityInModel?: number;
+    }
+  >();
+
+  if (Array.isArray(partsJson)) {
+    for (const item of partsJson) {
+      if (!item || typeof item !== 'object') {
+        continue;
+      }
+      const part = item as Record<string, unknown>;
+      const refId = String(part.id || '').trim();
+      if (!refId) {
+        continue;
+      }
+      partsById.set(refId, {
+        designID: typeof part.designID === 'string' ? part.designID : undefined,
+        name: typeof part.name === 'string' ? part.name : undefined,
+        colorID: typeof part.colorID === 'string' ? part.colorID : undefined,
+        quantityInModel: Number.isFinite(Number(part.quantity)) ? Number(part.quantity) : undefined
+      });
+    }
+  }
+
+  const resolved: ModelDetailResponse['resolvedSteps'] = [];
+  if (!Array.isArray(stepsJson)) {
+    return resolved;
+  }
+
+  for (const stepItem of stepsJson) {
+    if (!stepItem || typeof stepItem !== 'object') {
+      continue;
+    }
+    const stepObj = stepItem as Record<string, unknown>;
+    const step = Number(stepObj.step);
+    const refs = Array.isArray(stepObj.parts) ? stepObj.parts : [];
+    const parts = refs.map((refRaw) => {
+      const refId = String(refRaw || '').trim();
+      const detail = partsById.get(refId);
+      return {
+        refId,
+        designID: detail?.designID,
+        name: detail?.name,
+        colorID: detail?.colorID,
+        quantityInModel: detail?.quantityInModel
+      };
+    });
+
+    resolved.push({
+      step: Number.isFinite(step) && step > 0 ? step : resolved.length + 1,
+      parts
+    });
+  }
+
+  return resolved;
 }

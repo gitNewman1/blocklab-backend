@@ -65,6 +65,7 @@ Supports:
 Optional params:
 - `min_confidence` (0-1, default `0.6`)
 - `top_k` (default `4`)
+- `include_model_detail` (`true/false`, default `false`; when true returns best-match model steps/parts detail)
 
 Response includes:
 - `recognizedParts` (aggregated classes and quantities from Roboflow)
