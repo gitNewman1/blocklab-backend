@@ -27,10 +27,8 @@ export const config = {
     batchSize: Number.isFinite(parsedRebrickableBatchSize) ? parsedRebrickableBatchSize : 80
   },
   roboflow: {
-    apiKey: process.env.API_KEY || '',
-    workflowUrl:
-      process.env.ROBOFLOW_WORKFLOW_URL ||
-      'https://serverless.roboflow.com/blocks-mdc9p/workflows/blocklab',
+    apiKey: process.env.ROBOFLOW_API_KEY || '',
+    workflowUrl: process.env.ROBOFLOW_WORKFLOW_URL || '',
     timeoutMs: Number.isFinite(parsedRoboflowTimeoutMs) ? parsedRoboflowTimeoutMs : 12000
   }
 };

@@ -76,6 +76,5 @@ Response includes:
 - Production should expose `uploads/` via Nginx `/static/` mapping.
 
 ## Roboflow
-- `API_KEY` is used for Roboflow workflow authentication.
-- `ROBOFLOW_WORKFLOW_URL` default:
-  - `https://serverless.roboflow.com/blocks-mdc9p/workflows/blocklab`
+- `ROBOFLOW_API_KEY` is used for Roboflow workflow authentication.
+- `ROBOFLOW_WORKFLOW_URL` must be configured in `.env`.

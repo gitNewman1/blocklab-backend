@@ -10,7 +10,10 @@ type RoboflowResponse = unknown;
 export class RoboflowService {
   async detectByImageUrl(imageUrl: string): Promise<RoboflowResponse> {
     if (!config.roboflow.apiKey) {
-      throw new Error('API_KEY is missing');
+      throw new Error('ROBOFLOW_API_KEY is missing');
+    }
+    if (!config.roboflow.workflowUrl) {
+      throw new Error('ROBOFLOW_WORKFLOW_URL is missing');
     }
 
     const controller = new AbortController();
