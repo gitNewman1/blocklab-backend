@@ -376,6 +376,11 @@
       box.scrollLeft = 0;
     }
 
+    function formatElapsed(startedAt) {
+      const elapsedMs = Math.max(0, performance.now() - startedAt);
+      return `${elapsedMs.toFixed(0)} ms`;
+    }
+
     async function uploadModel({ confirmDuplicate = false, confirmExactMatch = false }) {
       const nameInput = document.getElementById('name');
       const ioInput = document.getElementById('ioFile');
@@ -447,6 +452,7 @@
       e.preventDefault();
       const statusEl = document.getElementById('uploadStatus');
       const submitBtn = document.getElementById('uploadSubmitBtn');
+      const startedAt = performance.now();
 
       submitBtn.disabled = true;
       setStatus(statusEl, 'loading', '正在上传文件，请稍候...');
@@ -456,10 +462,10 @@
         setStatus(
           statusEl,
           'success',
-          `上传成功\n模型 ID：${data.data.id}\n模型名称：${data.data.name}\n说明书地址：${data.data.manualUrl || '无'}`
+          `上传成功\n模型 ID：${data.data.id}\n模型名称：${data.data.name}\n说明书地址：${data.data.manualUrl || '无'}\n调用耗时：${formatElapsed(startedAt)}`
         );
       } catch (error) {
-        setStatus(statusEl, 'error', `上传失败\n错误信息：${error.message}`);
+        setStatus(statusEl, 'error', `上传失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
       } finally {
         submitBtn.disabled = false;
       }
@@ -467,6 +473,7 @@
 
     async function callApi(url) {
       const statusEl = document.getElementById('apiStatus');
+      const startedAt = performance.now();
       setStatus(statusEl, 'loading', `请求中：${url}`);
 
       try {
@@ -481,19 +488,20 @@
         setJsonOutput(data);
 
         if (!response.ok || data.success === false) {
-          setStatus(statusEl, 'error', `请求失败（HTTP ${response.status}）`);
+          setStatus(statusEl, 'error', `请求失败（HTTP ${response.status}）\n调用耗时：${formatElapsed(startedAt)}`);
           return;
         }
 
-        setStatus(statusEl, 'success', `请求成功（HTTP ${response.status}）`);
+        setStatus(statusEl, 'success', `请求成功（HTTP ${response.status}）\n调用耗时：${formatElapsed(startedAt)}`);
       } catch (error) {
         setJsonOutput({ success: false, message: error.message });
-        setStatus(statusEl, 'error', `请求失败\n错误信息：${error.message}`);
+        setStatus(statusEl, 'error', `请求失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
       }
     }
 
     async function callPostApi(url, payload) {
       const statusEl = document.getElementById('apiStatus');
+      const startedAt = performance.now();
       setStatus(statusEl, 'loading', `请求中：POST ${url}`);
 
       try {
@@ -515,19 +523,20 @@
         setJsonOutput(data);
 
         if (!response.ok || data.success === false) {
-          setStatus(statusEl, 'error', `请求失败（HTTP ${response.status}）`);
+          setStatus(statusEl, 'error', `请求失败（HTTP ${response.status}）\n调用耗时：${formatElapsed(startedAt)}`);
           return;
         }
 
-        setStatus(statusEl, 'success', `请求成功（HTTP ${response.status}）`);
+        setStatus(statusEl, 'success', `请求成功（HTTP ${response.status}）\n调用耗时：${formatElapsed(startedAt)}`);
       } catch (error) {
         setJsonOutput({ success: false, message: error.message });
-        setStatus(statusEl, 'error', `请求失败\n错误信息：${error.message}`);
+        setStatus(statusEl, 'error', `请求失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
       }
     }
 
     async function callPostMultipartApi(url, formData) {
       const statusEl = document.getElementById('apiStatus');
+      const startedAt = performance.now();
       setStatus(statusEl, 'loading', `请求中：POST ${url}`);
 
       try {
@@ -546,14 +555,14 @@
         setJsonOutput(data);
 
         if (!response.ok || data.success === false) {
-          setStatus(statusEl, 'error', `请求失败（HTTP ${response.status}）`);
+          setStatus(statusEl, 'error', `请求失败（HTTP ${response.status}）\n调用耗时：${formatElapsed(startedAt)}`);
           return;
         }
 
-        setStatus(statusEl, 'success', `请求成功（HTTP ${response.status}）`);
+        setStatus(statusEl, 'success', `请求成功（HTTP ${response.status}）\n调用耗时：${formatElapsed(startedAt)}`);
       } catch (error) {
         setJsonOutput({ success: false, message: error.message });
-        setStatus(statusEl, 'error', `请求失败\n错误信息：${error.message}`);
+        setStatus(statusEl, 'error', `请求失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
       }
     }
 
