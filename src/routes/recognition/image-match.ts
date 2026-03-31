@@ -412,7 +412,10 @@ function collectPredictionArrays(raw: unknown): Array<Array<Record<string, unkno
 }
 
 function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPart[] {
-  const map = new Map<string, { quantity: number; confidenceSum: number; confidenceMax: number }>();
+  const map = new Map<
+    string,
+    { rawName: string; quantity: number; confidenceSum: number; confidenceMax: number }
+  >();
 
   for (const detection of detections) {
     const normalized = normalizePartKey(detection.className);
@@ -423,6 +426,7 @@ function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPar
     const existing = map.get(normalized);
     if (!existing) {
       map.set(normalized, {
+        rawName: detection.className,
         quantity: 1,
         confidenceSum: detection.confidence,
         confidenceMax: detection.confidence
@@ -436,8 +440,8 @@ function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPar
   }
 
   return Array.from(map.entries())
-    .map(([name, value]) => ({
-      name,
+    .map(([, value]) => ({
+      name: value.rawName,
       quantity: value.quantity,
       avgConfidence: Number((value.confidenceSum / value.quantity).toFixed(4)),
       maxConfidence: Number(value.confidenceMax.toFixed(4))
