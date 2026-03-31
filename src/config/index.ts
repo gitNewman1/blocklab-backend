@@ -7,7 +7,7 @@ const parsedPort = parseInt(process.env.PORT || '3000', 10);
 const parsedMaxFileSizeMb = parseInt(process.env.MAX_FILE_SIZE_MB || '50', 10);
 const parsedRebrickableTimeoutMs = parseInt(process.env.REBRICKABLE_TIMEOUT_MS || '8000', 10);
 const parsedRebrickableBatchSize = parseInt(process.env.REBRICKABLE_BATCH_SIZE || '80', 10);
-const parsedRoboflowTimeoutMs = parseInt(process.env.ROBOFLOW_TIMEOUT_MS || '12000', 10);
+const parsedRoboflowTimeoutMs = parseInt(process.env.ROBOFLOW_TIMEOUT || '15000', 10);
 
 export const config = {
   port: Number.isFinite(parsedPort) ? parsedPort : 3000,
@@ -29,6 +29,6 @@ export const config = {
   roboflow: {
     apiKey: process.env.ROBOFLOW_API_KEY || '',
     workflowUrl: process.env.ROBOFLOW_WORKFLOW_URL || '',
-    timeoutMs: Number.isFinite(parsedRoboflowTimeoutMs) ? parsedRoboflowTimeoutMs : 12000
+    timeoutMs: Number.isFinite(parsedRoboflowTimeoutMs) ? parsedRoboflowTimeoutMs : 15000
   }
 };
