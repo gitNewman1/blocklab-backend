@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 
 type RoboflowImageInput = {
   type: 'url';
@@ -20,7 +21,10 @@ export class RoboflowService {
     const timeout = setTimeout(() => controller.abort(), config.roboflow.timeoutMs);
 
     try {
-      const response = await fetch(config.roboflow.workflowUrl, {
+      const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+      const dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
+
+      const response = await undiciFetch(config.roboflow.workflowUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -34,8 +38,9 @@ export class RoboflowService {
             } as RoboflowImageInput
           }
         }),
-        signal: controller.signal
-      });
+        signal: controller.signal,
+        dispatcher
+      } as any);
 
       if (!response.ok) {
         const bodyPreview = (await response.text()).slice(0, 500);
