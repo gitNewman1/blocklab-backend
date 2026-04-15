@@ -350,6 +350,19 @@
           </div>
         </div>
 
+        <div class="card">
+          <div class="card-head">
+            <h3>用户登录：<span class="api-inline">/api/auth/login</span></h3>
+            <div class="card-tools">
+              <button type="button" id="btnLogin">调用 POST</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="loginUnionIdInput">unionId（华为账号）</label>
+            <input type="text" id="loginUnionIdInput" placeholder="例如：abc123xyz">
+          </div>
+        </div>
+
         <div id="apiStatus" class="status"></div>
         <div class="json-title">接口返回 JSON</div>
         <pre id="apiJsonOutput" class="json-box">{}</pre>
@@ -590,6 +603,16 @@
         const statusEl = document.getElementById('apiStatus');
         setStatus(statusEl, 'error', `请求 JSON 解析失败\n错误信息：${error.message}`);
       }
+    });
+
+    document.getElementById('btnLogin').addEventListener('click', async () => {
+      const unionId = document.getElementById('loginUnionIdInput').value.trim();
+      const statusEl = document.getElementById('apiStatus');
+      if (!unionId) {
+        setStatus(statusEl, 'error', '请输入 unionId');
+        return;
+      }
+      await callPostApi('/api/auth/login', { unionId });
     });
 
     document.getElementById('btnImageMatch').addEventListener('click', async () => {
