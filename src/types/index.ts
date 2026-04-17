@@ -8,6 +8,7 @@ export interface Part {
   id: string;
   designID: string;
   name?: string;
+  imgUrl?: string | null;
   quantity: number;
   colorID?: string;
 }

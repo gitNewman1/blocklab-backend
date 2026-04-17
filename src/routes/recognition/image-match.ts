@@ -16,6 +16,7 @@ type InputPart = {
 type RecognizedPart = InputPart & {
   avgConfidence: number;
   maxConfidence: number;
+  imgUrl?: string | null;
 };
 
 type ModelVector = {
@@ -186,10 +187,31 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
         matches = fuzzyMatches.slice(0, topK);
       }
 
+      const recognizedImageBase64 = extractOutputImageBase64(roboflowRaw);
+
+      // Build imgUrl map from best match model's partsJson
+      const imgUrlByName = new Map<string, string | null>();
+      if (matches.length > 0) {
+        const bestModel = models.find((m) => m.id === matches[0].id);
+        if (bestModel) {
+          for (const item of extractPartsWithImgUrl(bestModel.partsJson)) {
+            if (item.name) {
+              imgUrlByName.set(normalizePartKey(item.name), item.imgUrl ?? null);
+            }
+          }
+        }
+      }
+
+      const enrichedRecognizedParts: RecognizedPart[] = recognizedParts.map((p) => ({
+        ...p,
+        imgUrl: imgUrlByName.get(normalizePartKey(p.name)) ?? null
+      }));
+
       const responseData: {
         imageUrl: string;
         minConfidence: number;
         includeModelDetail: boolean;
+        recognizedImageBase64: string | null;
         recognizedParts: RecognizedPart[];
         matches: ReturnType<typeof toResponseItem>[];
         modelDetail?: ModelDetailResponse;
@@ -197,7 +219,8 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
         imageUrl,
         minConfidence,
         includeModelDetail,
-        recognizedParts,
+        recognizedImageBase64,
+        recognizedParts: enrichedRecognizedParts,
         matches: matches.map(toResponseItem)
       };
 
@@ -630,6 +653,28 @@ function toBooleanFlag(value: unknown): boolean {
   }
   const raw = String(value || '').trim().toLowerCase();
   return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+function extractOutputImageBase64(raw: unknown): string | null {
+  if (!Array.isArray(raw)) return null;
+  for (const item of raw) {
+    const val = (item as any)?.output_image?.value;
+    if (typeof val === 'string' && val.length > 0) return val;
+  }
+  return null;
+}
+
+function extractPartsWithImgUrl(partsJson: unknown): Array<{ name?: string; imgUrl?: string | null }> {
+  if (!Array.isArray(partsJson)) return [];
+  return partsJson
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const p = item as Record<string, unknown>;
+      return {
+        name: typeof p.name === 'string' ? p.name : undefined,
+        imgUrl: typeof p.imgUrl === 'string' ? p.imgUrl : null
+      };
+    });
 }
 
 function buildResolvedSteps(partsJson: unknown, stepsJson: unknown): ModelDetailResponse['resolvedSteps'] {

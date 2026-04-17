@@ -10,6 +10,7 @@ type LoggerLike = {
 interface RebrickablePartItem {
   part_num?: string;
   name?: string;
+  part_img_url?: string;
 }
 
 interface RebrickablePartsResponse {
@@ -41,7 +42,7 @@ export class RebrickableService {
     );
 
     const startedAt = Date.now();
-    const nameMap = new Map<string, string>();
+    const nameMap = new Map<string, { name: string; imgUrl: string | null }>();
     const chunks = this.chunk(uniqueDesignIds, Math.max(1, config.rebrickable.batchSize));
 
     for (let i = 0; i < chunks.length; i += 1) {
@@ -58,7 +59,7 @@ export class RebrickableService {
         const partNum = (item.part_num || '').trim();
         const partName = (item.name || '').trim();
         if (partNum && partName) {
-          nameMap.set(partNum, partName);
+          nameMap.set(partNum, { name: partName, imgUrl: item.part_img_url || null });
         }
       }
 
@@ -74,13 +75,14 @@ export class RebrickableService {
     }
 
     const enriched = parts.map((part) => {
-      const partName = nameMap.get(part.designID);
-      if (!partName) {
+      const entry = nameMap.get(part.designID);
+      if (!entry) {
         return part;
       }
       return {
         ...part,
-        name: partName
+        name: entry.name,
+        imgUrl: entry.imgUrl
       };
     });
 
