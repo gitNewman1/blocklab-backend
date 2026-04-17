@@ -265,6 +265,23 @@
           <button type="submit" id="uploadSubmitBtn">上传</button>
           <div id="uploadStatus" class="status"></div>
         </form>
+
+        <div class="card" id="createModelCard">
+          <h3>手动创建模型 <span class="api-inline">/api/admin/models/create</span></h3>
+          <div class="form-group">
+            <label for="createName">模型名称</label>
+            <input type="text" id="createName" placeholder="例如：蜗牛模型">
+          </div>
+          <div class="form-group">
+            <label for="createParts">零件列表（JSON）</label>
+            <textarea id="createParts">[
+  { "designID": "3001", "quantity": 4 },
+  { "designID": "3020", "quantity": 2 }
+]</textarea>
+          </div>
+          <button type="button" id="btnCreateModel">创建</button>
+          <div id="createStatus" class="status"></div>
+        </div>
       </section>
 
       <section class="panel">
@@ -372,6 +389,7 @@
 
   <script>
     const API_UPLOAD_URL = '/api/admin/models/upload';
+    const API_CREATE_URL = '/api/admin/models/create';
     const API_MODELS_URL = '/api/models';
     const API_RECOGNITION_MATCH_URL = '/api/recognition/match';
     const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/image-match';
@@ -656,6 +674,46 @@
       }
       payload.include_model_detail = includeModelDetail;
       await callPostApi(API_RECOGNITION_IMAGE_MATCH_URL, payload);
+    });
+    document.getElementById('btnCreateModel').addEventListener('click', async () => {
+      const statusEl = document.getElementById('createStatus');
+      const name = document.getElementById('createName').value.trim();
+      const partsRaw = document.getElementById('createParts').value;
+      const startedAt = performance.now();
+
+      if (!name) {
+        setStatus(statusEl, 'error', '请填写模型名称');
+        return;
+      }
+
+      let parts;
+      try {
+        parts = JSON.parse(partsRaw);
+      } catch (e) {
+        setStatus(statusEl, 'error', '零件列表 JSON 格式错误');
+        return;
+      }
+
+      statusEl.className = 'status loading';
+      statusEl.style.display = 'block';
+      statusEl.textContent = '创建中...';
+
+      try {
+        const response = await fetch(API_CREATE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, parts })
+        });
+        const data = await response.json();
+        setJsonOutput(data);
+        if (!response.ok || !data.success) {
+          setStatus(statusEl, 'error', `创建失败：${data.message}\n耗时：${formatElapsed(startedAt)}`);
+        } else {
+          setStatus(statusEl, 'success', `创建成功\n模型 ID：${data.data.id}\n耗时：${formatElapsed(startedAt)}`);
+        }
+      } catch (e) {
+        setStatus(statusEl, 'error', `请求失败：${e.message}`);
+      }
     });
   </script>
 </body>

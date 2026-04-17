@@ -13,8 +13,6 @@ const allowedManualExts = new Set(['.pdf']);
 
 export async function modelsRoutes(app: FastifyInstance) {
   app.post('/upload', async (request, reply) => {
-    try {
-      request.log.info('Start processing model upload request');
 
       const parts = request.parts();
       const files: Record<string, UploadedFile> = {};
@@ -169,6 +167,52 @@ export async function modelsRoutes(app: FastifyInstance) {
         message: error.message,
         error: 'INTERNAL_ERROR'
       });
+    }
+  });
+
+  app.post('/create', async (request, reply) => {
+    try {
+      const body = (request.body || {}) as Record<string, unknown>;
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!name) {
+        return reply.code(400).send({ success: false, message: 'name 为必填项', error: 'MISSING_REQUIRED_FIELD' });
+      }
+
+      const rawParts = Array.isArray(body.parts) ? body.parts : [];
+      const parts: Array<{ designID: string; quantity: number }> = [];
+      for (const item of rawParts) {
+        if (!item || typeof item !== 'object') continue;
+        const p = item as Record<string, unknown>;
+        const designID = typeof p.designID === 'string' ? p.designID.trim() : '';
+        const quantity = Number(p.quantity);
+        if (!designID || !Number.isFinite(quantity) || quantity <= 0) {
+          return reply.code(400).send({ success: false, message: `零件数据无效：designID 和 quantity 为必填项`, error: 'INVALID_PARTS' });
+        }
+        parts.push({ designID, quantity });
+      }
+      if (parts.length === 0) {
+        return reply.code(400).send({ success: false, message: 'parts 不能为空', error: 'MISSING_REQUIRED_FIELD' });
+      }
+
+      const enrichedParts = await rebrickableService.enrichParts(
+        parts.map((p) => ({ id: p.designID, designID: p.designID, quantity: p.quantity })),
+        request.log
+      );
+
+      const model = await prisma.model.create({
+        data: {
+          name,
+          ioFileUrl: '',
+          model3dUrl: '',
+          partsJson: enrichedParts as any,
+          stepsJson: [] as any
+        }
+      });
+
+      return reply.send({ success: true, message: '模型创建成功', data: model });
+    } catch (error: any) {
+      request.log.error({ error: error.message, stack: error.stack }, 'Model create failed');
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }
   });
 }
