@@ -13,6 +13,8 @@ const allowedManualExts = new Set(['.pdf']);
 
 export async function modelsRoutes(app: FastifyInstance) {
   app.post('/upload', async (request, reply) => {
+    try {
+      request.log.info('Start processing model upload request');
 
       const parts = request.parts();
       const files: Record<string, UploadedFile> = {};
