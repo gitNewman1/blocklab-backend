@@ -313,7 +313,7 @@
 
         <div class="card">
           <div class="card-head">
-            <h3>匹配模型：<span class="api-inline">/api/recognition/match</span></h3>
+            <h3>匹配模型：<span class="api-inline">/api/recognition/json-match</span></h3>
             <div class="card-tools">
               <button type="button" id="btnMatchModels">调用 POST</button>
             </div>
@@ -331,7 +331,7 @@
 
         <div class="card">
           <div class="card-head">
-            <h3>图片识别匹配：<span class="api-inline">/api/recognition/image-match</span></h3>
+            <h3>图片识别匹配：<span class="api-inline">/api/recognition/match</span></h3>
             <div class="card-tools">
               <button type="button" id="btnImageMatch">调用 POST</button>
             </div>
@@ -391,8 +391,8 @@
     const API_UPLOAD_URL = '/api/admin/models/upload';
     const API_CREATE_URL = '/api/admin/models/create';
     const API_MODELS_URL = '/api/models';
-    const API_RECOGNITION_MATCH_URL = '/api/recognition/match';
-    const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/image-match';
+    const API_RECOGNITION_MATCH_URL = '/api/recognition/json-match';
+    const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/match';
 
     function setStatus(el, type, text) {
       el.className = `status ${type}`;

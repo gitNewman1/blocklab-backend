@@ -31,7 +31,7 @@ type ScoredMatch = {
 };
 
 export async function recognitionMatchRoutes(app: FastifyInstance) {
-  app.post('/match', async (request, reply) => {
+  app.post('/json-match', async (request, reply) => {
     try {
       const inputParts = parseInputParts((request.body as { parts?: unknown })?.parts);
       if (inputParts.length === 0) {

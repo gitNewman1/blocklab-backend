@@ -73,7 +73,7 @@ type ModelDetailResponse = {
 };
 
 export async function recognitionImageMatchRoutes(app: FastifyInstance) {
-  app.post('/image-match', async (request, reply) => {
+  app.post('/match', async (request, reply) => {
     try {
       const parsedInput = await parseImageInput(request);
       if (parsedInput.hasBothInputs) {
