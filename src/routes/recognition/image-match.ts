@@ -656,10 +656,29 @@ function toBooleanFlag(value: unknown): boolean {
 }
 
 function extractOutputImageBase64(raw: unknown): string | null {
-  if (!Array.isArray(raw)) return null;
-  for (const item of raw) {
-    const val = (item as any)?.output_image?.value;
-    if (typeof val === 'string' && val.length > 0) return val;
+  const stack: unknown[] = [raw];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== 'object') {
+      continue;
+    }
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        stack.push(item);
+      }
+      continue;
+    }
+    const obj = current as Record<string, unknown>;
+    const outputImage = obj.output_image as Record<string, unknown> | undefined;
+    if (outputImage && typeof outputImage === 'object') {
+      const val = outputImage.value;
+      if (typeof val === 'string' && val.length > 0) {
+        return val;
+      }
+    }
+    for (const value of Object.values(obj)) {
+      stack.push(value);
+    }
   }
   return null;
 }
