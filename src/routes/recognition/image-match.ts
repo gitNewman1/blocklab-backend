@@ -70,7 +70,6 @@ type ModelDetailResponse = {
   ioFileUrl: string;
   model3dUrl: string;
   partsJson: unknown;
-  stepsJson: unknown;
   resolvedSteps: ResolvedStep[];
 };
 
@@ -254,9 +253,10 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
         });
 
         if (bestModel) {
+          const { stepsJson, ...rest } = bestModel;
           responseData.modelDetail = {
-            ...bestModel,
-            resolvedSteps: buildResolvedSteps(bestModel.partsJson, bestModel.stepsJson)
+            ...rest,
+            resolvedSteps: buildResolvedSteps(rest.partsJson, stepsJson)
           };
         }
       }

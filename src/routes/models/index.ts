@@ -70,12 +70,13 @@ export async function modelQueryRoutes(app: FastifyInstance) {
         });
       }
 
+      const { stepsJson, ...rest } = model;
       return reply.send({
         success: true,
         message: 'Model fetched successfully',
         data: {
-          ...model,
-          resolvedSteps: buildResolvedSteps(model.partsJson, model.stepsJson)
+          ...rest,
+          resolvedSteps: buildResolvedSteps(model.partsJson, stepsJson)
         }
       });
     } catch (error: any) {
