@@ -13,10 +13,20 @@ type InputPart = {
   quantity: number;
 };
 
+type DetectionBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  confidence: number;
+};
+
 type RecognizedPart = InputPart & {
   avgConfidence: number;
   maxConfidence: number;
   imgUrl?: string | null;
+  designId?: string | null;
+  coordinates: DetectionBox[];
 };
 
 type ModelVector = {
@@ -45,6 +55,10 @@ type Detection = {
   className: string;
   confidence: number;
   detectionId?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 type ModelDetailResponse = {
@@ -189,23 +203,30 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
 
       const recognizedImageBase64 = extractOutputImageBase64(roboflowRaw);
 
-      // Build imgUrl map from best match model's partsJson
-      const imgUrlByName = new Map<string, string | null>();
+      // Build imgUrl/designId map from best match model's partsJson
+      const partInfoByName = new Map<string, { imgUrl: string | null; designId: string | null }>();
       if (matches.length > 0) {
         const bestModel = models.find((m) => m.id === matches[0].id);
         if (bestModel) {
           for (const item of extractPartsWithImgUrl(bestModel.partsJson)) {
             if (item.name) {
-              imgUrlByName.set(normalizePartKey(item.name), item.imgUrl ?? null);
+              partInfoByName.set(normalizePartKey(item.name), {
+                imgUrl: item.imgUrl ?? null,
+                designId: item.designId ?? null
+              });
             }
           }
         }
       }
 
-      const enrichedRecognizedParts: RecognizedPart[] = recognizedParts.map((p) => ({
-        ...p,
-        imgUrl: imgUrlByName.get(normalizePartKey(p.name)) ?? null
-      }));
+      const enrichedRecognizedParts: RecognizedPart[] = recognizedParts.map((p) => {
+        const info = partInfoByName.get(normalizePartKey(p.name));
+        return {
+          ...p,
+          imgUrl: info?.imgUrl ?? null,
+          designId: info?.designId ?? null
+        };
+      });
 
       const responseData: {
         imageUrl: string;
@@ -363,12 +384,24 @@ function extractDetectionsFromRoboflowResult(raw: unknown): Detection[] {
         continue;
       }
       const detectionId = typeof obj.detection_id === 'string' ? obj.detection_id : undefined;
-      const dedupeKey = detectionId || `${className}|${confidence}|${obj.x}|${obj.y}|${obj.width}|${obj.height}`;
+      const x = Number(obj.x);
+      const y = Number(obj.y);
+      const width = Number(obj.width);
+      const height = Number(obj.height);
+      const dedupeKey = detectionId || `${className}|${confidence}|${x}|${y}|${width}|${height}`;
       if (seen.has(dedupeKey)) {
         continue;
       }
       seen.add(dedupeKey);
-      out.push({ className, confidence, detectionId });
+      out.push({
+        className,
+        confidence,
+        detectionId,
+        x: Number.isFinite(x) ? x : 0,
+        y: Number.isFinite(y) ? y : 0,
+        width: Number.isFinite(width) ? width : 0,
+        height: Number.isFinite(height) ? height : 0
+      });
     }
   }
 
@@ -437,7 +470,13 @@ function collectPredictionArrays(raw: unknown): Array<Array<Record<string, unkno
 function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPart[] {
   const map = new Map<
     string,
-    { rawName: string; quantity: number; confidenceSum: number; confidenceMax: number }
+    {
+      rawName: string;
+      quantity: number;
+      confidenceSum: number;
+      confidenceMax: number;
+      coordinates: DetectionBox[];
+    }
   >();
 
   for (const detection of detections) {
@@ -446,13 +485,22 @@ function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPar
       continue;
     }
 
+    const box: DetectionBox = {
+      x: Number(detection.x.toFixed(2)),
+      y: Number(detection.y.toFixed(2)),
+      width: Number(detection.width.toFixed(2)),
+      height: Number(detection.height.toFixed(2)),
+      confidence: Number(detection.confidence.toFixed(4))
+    };
+
     const existing = map.get(normalized);
     if (!existing) {
       map.set(normalized, {
         rawName: detection.className,
         quantity: 1,
         confidenceSum: detection.confidence,
-        confidenceMax: detection.confidence
+        confidenceMax: detection.confidence,
+        coordinates: [box]
       });
       continue;
     }
@@ -460,6 +508,7 @@ function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPar
     existing.quantity += 1;
     existing.confidenceSum += detection.confidence;
     existing.confidenceMax = Math.max(existing.confidenceMax, detection.confidence);
+    existing.coordinates.push(box);
   }
 
   return Array.from(map.entries())
@@ -467,7 +516,8 @@ function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPar
       name: value.rawName,
       quantity: value.quantity,
       avgConfidence: Number((value.confidenceSum / value.quantity).toFixed(4)),
-      maxConfidence: Number(value.confidenceMax.toFixed(4))
+      maxConfidence: Number(value.confidenceMax.toFixed(4)),
+      coordinates: value.coordinates
     }))
     .sort((a, b) => {
       if (b.quantity !== a.quantity) {
@@ -683,7 +733,9 @@ function extractOutputImageBase64(raw: unknown): string | null {
   return null;
 }
 
-function extractPartsWithImgUrl(partsJson: unknown): Array<{ name?: string; imgUrl?: string | null }> {
+function extractPartsWithImgUrl(
+  partsJson: unknown
+): Array<{ name?: string; imgUrl?: string | null; designId?: string | null }> {
   if (!Array.isArray(partsJson)) return [];
   return partsJson
     .filter((item) => item && typeof item === 'object')
@@ -691,7 +743,8 @@ function extractPartsWithImgUrl(partsJson: unknown): Array<{ name?: string; imgU
       const p = item as Record<string, unknown>;
       return {
         name: typeof p.name === 'string' ? p.name : undefined,
-        imgUrl: typeof p.imgUrl === 'string' ? p.imgUrl : null
+        imgUrl: typeof p.imgUrl === 'string' ? p.imgUrl : null,
+        designId: typeof p.designID === 'string' ? p.designID : null
       };
     });
 }
