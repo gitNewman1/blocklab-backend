@@ -2,7 +2,6 @@ import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { LocalStorageService } from '../../services/local-storage.service';
 import { RoboflowService } from '../../services/roboflow.service';
-import { buildResolvedSteps, ResolvedStep } from '../../services/resolve-steps';
 import { UploadedFile } from '../../types';
 
 const prisma = new PrismaClient();
@@ -70,7 +69,7 @@ type ModelDetailResponse = {
   ioFileUrl: string;
   model3dUrl: string;
   partsJson: unknown;
-  resolvedSteps: ResolvedStep[];
+  stepsJson: unknown;
 };
 
 export async function recognitionImageMatchRoutes(app: FastifyInstance) {
@@ -253,11 +252,7 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
         });
 
         if (bestModel) {
-          const { stepsJson, ...rest } = bestModel;
-          responseData.modelDetail = {
-            ...rest,
-            resolvedSteps: buildResolvedSteps(rest.partsJson, stepsJson)
-          };
+          responseData.modelDetail = bestModel;
         }
       }
 

@@ -1,6 +1,5 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { buildResolvedSteps } from '../../services/resolve-steps';
 
 const prisma = new PrismaClient();
 
@@ -70,14 +69,10 @@ export async function modelQueryRoutes(app: FastifyInstance) {
         });
       }
 
-      const { stepsJson, ...rest } = model;
       return reply.send({
         success: true,
         message: 'Model fetched successfully',
-        data: {
-          ...rest,
-          resolvedSteps: buildResolvedSteps(model.partsJson, stepsJson)
-        }
+        data: model
       });
     } catch (error: any) {
       request.log.error({ error: error.message, stack: error.stack }, 'Fetch model detail failed');
