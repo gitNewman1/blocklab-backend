@@ -10,7 +10,22 @@ export async function modelQueryRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Models'],
         summary: '获取所有模型',
+        querystring: {
+          type: 'object',
+          properties: {
+            type: { type: 'string', minLength: 1, description: '模型类型名称，可选' }
+          }
+        },
         response: {
+          400: {
+            description: '请求参数错误',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              error: { type: 'string' }
+            }
+          },
           200: {
             description: '成功返回模型列表',
             type: 'object',
@@ -41,41 +56,65 @@ export async function modelQueryRoutes(app: FastifyInstance) {
       }
     },
     async (request, reply) => {
-    try {
-      const models = await prisma.model.findMany({
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          name: true,
-          partCount: true,
-          thumbnailUrl: true,
-          manualUrl: true,
-          ioFileUrl: true,
-          model3dUrl: true,
-          createdAt: true,
-          modelTypeId: true,
-          modelType: {
+      try {
+        const query = (request.query || {}) as { type?: string };
+        const typeName = typeof query.type === 'string' ? query.type.trim() : '';
+
+        let modelTypeId: number | undefined;
+        if (typeName) {
+          const modelType = await prisma.modelType.findUnique({
+            where: { name: typeName },
             select: {
-              id: true,
-              name: true
+              id: true
+            }
+          });
+
+          if (!modelType) {
+            return reply.code(400).send({
+              success: false,
+              message: 'type does not exist',
+              error: 'INVALID_MODEL_TYPE'
+            });
+          }
+
+          modelTypeId = modelType.id;
+        }
+
+        const models = await prisma.model.findMany({
+          ...(typeof modelTypeId === 'number' ? { where: { modelTypeId } } : {}),
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            partCount: true,
+            thumbnailUrl: true,
+            manualUrl: true,
+            ioFileUrl: true,
+            model3dUrl: true,
+            createdAt: true,
+            modelTypeId: true,
+            modelType: {
+              select: {
+                id: true,
+                name: true
+              }
             }
           }
-        }
-      });
+        });
 
-      return reply.send({
-        success: true,
-        message: 'Models fetched successfully',
-        data: models.map(toModelResponse)
-      });
-    } catch (error: any) {
-      request.log.error({ error: error.message, stack: error.stack }, 'Fetch models failed');
-      return reply.code(500).send({
-        success: false,
-        message: error.message,
-        error: 'INTERNAL_ERROR'
-      });
-    }
+        return reply.send({
+          success: true,
+          message: 'Models fetched successfully',
+          data: models.map(toModelResponse)
+        });
+      } catch (error: any) {
+        request.log.error({ error: error.message, stack: error.stack }, 'Fetch models failed');
+        return reply.code(500).send({
+          success: false,
+          message: error.message,
+          error: 'INTERNAL_ERROR'
+        });
+      }
     }
   );
 
@@ -122,61 +161,61 @@ export async function modelQueryRoutes(app: FastifyInstance) {
       }
     },
     async (request, reply) => {
-    try {
-      const { id } = request.params as { id: string };
-      const modelId = Number(id);
-      if (!Number.isInteger(modelId) || modelId <= 0) {
-        return reply.code(400).send({
-          success: false,
-          message: 'id must be a positive integer',
-          error: 'INVALID_MODEL_ID'
-        });
-      }
+      try {
+        const { id } = request.params as { id: string };
+        const modelId = Number(id);
+        if (!Number.isInteger(modelId) || modelId <= 0) {
+          return reply.code(400).send({
+            success: false,
+            message: 'id must be a positive integer',
+            error: 'INVALID_MODEL_ID'
+          });
+        }
 
-      const model = await prisma.model.findUnique({
-        where: { id: modelId },
-        select: {
-          id: true,
-          name: true,
-          partCount: true,
-          thumbnailUrl: true,
-          manualUrl: true,
-          ioFileUrl: true,
-          model3dUrl: true,
-          partsJson: true,
-          stepsJson: true,
-          createdAt: true,
-          modelTypeId: true,
-          modelType: {
-            select: {
-              id: true,
-              name: true
+        const model = await prisma.model.findUnique({
+          where: { id: modelId },
+          select: {
+            id: true,
+            name: true,
+            partCount: true,
+            thumbnailUrl: true,
+            manualUrl: true,
+            ioFileUrl: true,
+            model3dUrl: true,
+            partsJson: true,
+            stepsJson: true,
+            createdAt: true,
+            modelTypeId: true,
+            modelType: {
+              select: {
+                id: true,
+                name: true
+              }
             }
           }
-        }
-      });
+        });
 
-      if (!model) {
-        return reply.code(404).send({
+        if (!model) {
+          return reply.code(404).send({
+            success: false,
+            message: 'Model not found',
+            error: 'MODEL_NOT_FOUND'
+          });
+        }
+
+        return reply.send({
+          success: true,
+          message: 'Model fetched successfully',
+          data: toModelResponse(model)
+        });
+      } catch (error: any) {
+        request.log.error({ error: error.message, stack: error.stack }, 'Fetch model detail failed');
+        return reply.code(500).send({
           success: false,
-          message: 'Model not found',
-          error: 'MODEL_NOT_FOUND'
+          message: error.message,
+          error: 'INTERNAL_ERROR'
         });
       }
-
-      return reply.send({
-        success: true,
-        message: 'Model fetched successfully',
-        data: toModelResponse(model)
-      });
-    } catch (error: any) {
-      request.log.error({ error: error.message, stack: error.stack }, 'Fetch model detail failed');
-      return reply.code(500).send({
-        success: false,
-        message: error.message,
-        error: 'INTERNAL_ERROR'
-      });
-    }
     }
   );
 }
