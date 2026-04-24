@@ -24,7 +24,6 @@ export async function registerSwagger(app: FastifyInstance) {
     uiConfig: {
       docExpansion: 'list',
       deepLinking: false
-    },
-    staticCSP: true
+    }
   });
 }
