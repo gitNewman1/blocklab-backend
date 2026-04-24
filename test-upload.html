@@ -361,8 +361,35 @@
           </div>
           <label class="inline-check">
             <input type="checkbox" id="deleteModelFilesInput">
-            清空模型数据时，同时删除 uploads/io-files、models-3d、thumbnails、manuals 中的历史文件
+            清空或删除模型数据时，同时删除 uploads/io-files、models-3d、thumbnails、manuals 中的历史文件
           </label>
+          <div class="api-row" style="margin-top: 10px;">
+            <div class="form-group">
+              <label for="deleteModelIdInput">删除指定模型 ID</label>
+              <input type="number" id="deleteModelIdInput" min="1" placeholder="例如：1">
+            </div>
+            <div class="btn-row">
+              <button type="button" id="btnDeleteModelById">删除模型</button>
+            </div>
+          </div>
+          <div class="api-row">
+            <div class="form-group">
+              <label for="deleteModelTypeIdInput">删除指定类型 ID</label>
+              <input type="number" id="deleteModelTypeIdInput" min="1" placeholder="例如：1">
+            </div>
+            <div class="btn-row">
+              <button type="button" id="btnDeleteModelTypeById">删除类型</button>
+            </div>
+          </div>
+          <div class="api-row">
+            <div class="form-group">
+              <label for="deleteUserIdInput">删除指定用户 ID</label>
+              <input type="text" id="deleteUserIdInput" placeholder="例如：uuid">
+            </div>
+            <div class="btn-row">
+              <button type="button" id="btnDeleteUserById">删除用户</button>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -449,6 +476,9 @@
     const API_CLEAR_MODELS_URL = '/api/admin/data/clear-models';
     const API_CLEAR_MODEL_TYPES_URL = '/api/admin/data/clear-model-types';
     const API_CLEAR_USERS_URL = '/api/admin/data/clear-users';
+    const API_DELETE_MODEL_URL = '/api/admin/data/delete-model';
+    const API_DELETE_MODEL_TYPE_URL = '/api/admin/data/delete-model-type';
+    const API_DELETE_USER_URL = '/api/admin/data/delete-user';
     const API_RECOGNITION_MATCH_URL = '/api/recognition/json-match';
     const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/match';
 
@@ -800,6 +830,63 @@
         payload: {},
         confirmText: '确定要清空所有用户数据吗？此操作不可恢复。',
         successText: '用户数据清理请求已完成'
+      });
+    });
+
+    document.getElementById('btnDeleteModelById').addEventListener('click', async () => {
+      const id = Number(document.getElementById('deleteModelIdInput').value);
+      const deleteFiles = document.getElementById('deleteModelFilesInput').checked;
+      const statusEl = document.getElementById('apiStatus');
+
+      if (!Number.isInteger(id) || id <= 0) {
+        setStatus(statusEl, 'error', '请输入合法的模型 ID（正整数）');
+        return;
+      }
+
+      await confirmAndClearData({
+        url: API_DELETE_MODEL_URL,
+        payload: { id, deleteFiles },
+        confirmText: deleteFiles
+          ? `确定要删除模型 ID=${id}，并删除对应模型文件吗？此操作不可恢复。`
+          : `确定要删除模型 ID=${id} 吗？此操作不可恢复。`,
+        successText: deleteFiles ? `模型 ID=${id} 及其文件删除请求已完成` : `模型 ID=${id} 删除请求已完成`
+      });
+    });
+
+    document.getElementById('btnDeleteModelTypeById').addEventListener('click', async () => {
+      const id = Number(document.getElementById('deleteModelTypeIdInput').value);
+      const statusEl = document.getElementById('apiStatus');
+
+      if (!Number.isInteger(id) || id <= 0) {
+        setStatus(statusEl, 'error', '请输入合法的类型 ID（正整数）');
+        return;
+      }
+
+      await confirmAndClearData({
+        url: API_DELETE_MODEL_TYPE_URL,
+        payload: { id },
+        confirmText: `确定要删除类型 ID=${id} 吗？关联模型的类型字段会被清空。此操作不可恢复。`,
+        successText: `类型 ID=${id} 删除请求已完成`,
+        onSuccess: async () => {
+          await loadModelTypesForUpload();
+        }
+      });
+    });
+
+    document.getElementById('btnDeleteUserById').addEventListener('click', async () => {
+      const id = document.getElementById('deleteUserIdInput').value.trim();
+      const statusEl = document.getElementById('apiStatus');
+
+      if (!id) {
+        setStatus(statusEl, 'error', '请输入用户 ID');
+        return;
+      }
+
+      await confirmAndClearData({
+        url: API_DELETE_USER_URL,
+        payload: { id },
+        confirmText: `确定要删除用户 ID=${id} 吗？此操作不可恢复。`,
+        successText: `用户 ID=${id} 删除请求已完成`
       });
     });
 

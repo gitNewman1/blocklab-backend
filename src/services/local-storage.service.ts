@@ -39,6 +39,16 @@ export class LocalStorageService {
     }
   }
 
+  async deleteFilesByUrls(urls: Array<string | null | undefined>): Promise<void> {
+    const absolutePaths = urls
+      .map((url) => this.resolvePublicUrlToAbsolutePath(url))
+      .filter((item): item is string => !!item);
+
+    await Promise.all(
+      absolutePaths.map((absolutePath) => fs.promises.rm(absolutePath, { force: true }))
+    );
+  }
+
   private ensureBaseFolders(): void {
     const folders = ['io-files', 'models-3d', 'thumbnails', 'manuals', 'posts', 'recognition-images'];
     for (const folder of folders) {
@@ -49,5 +59,38 @@ export class LocalStorageService {
   private sanitizeFilename(filename: string): string {
     const name = path.basename(filename);
     return name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  private resolvePublicUrlToAbsolutePath(url: string | null | undefined): string | null {
+    if (!url || typeof url !== 'string') {
+      return null;
+    }
+
+    let pathname = '';
+    try {
+      pathname = new URL(url, config.storage.publicBaseUrl).pathname;
+    } catch {
+      return null;
+    }
+
+    const staticPrefix = '/static/';
+    const staticIndex = pathname.indexOf(staticPrefix);
+    if (staticIndex < 0) {
+      return null;
+    }
+
+    const relativePath = pathname.slice(staticIndex + staticPrefix.length);
+    if (!relativePath) {
+      return null;
+    }
+
+    const absolutePath = path.resolve(config.storage.uploadRoot, relativePath);
+    const uploadRoot = path.resolve(config.storage.uploadRoot);
+    const relativeToRoot = path.relative(uploadRoot, absolutePath);
+    if (relativeToRoot.startsWith('..') || path.isAbsolute(relativeToRoot)) {
+      return null;
+    }
+
+    return absolutePath;
   }
 }
