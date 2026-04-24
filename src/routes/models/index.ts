@@ -13,7 +13,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
         querystring: {
           type: 'object',
           properties: {
-            type: { type: 'string', minLength: 1, description: '模型类型名称，可选' }
+            type: { type: 'integer', minimum: 1, description: '模型类型 ID，可选' }
           }
         },
         response: {
@@ -57,13 +57,21 @@ export async function modelQueryRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       try {
-        const query = (request.query || {}) as { type?: string };
-        const typeName = typeof query.type === 'string' ? query.type.trim() : '';
-
+        const query = (request.query || {}) as { type?: unknown };
         let modelTypeId: number | undefined;
-        if (typeName) {
+
+        if (typeof query.type !== 'undefined') {
+          const parsedTypeId = Number(query.type);
+          if (!Number.isInteger(parsedTypeId) || parsedTypeId <= 0) {
+            return reply.code(400).send({
+              success: false,
+              message: 'type must be a positive integer',
+              error: 'INVALID_MODEL_TYPE'
+            });
+          }
+
           const modelType = await prisma.modelType.findUnique({
-            where: { name: typeName },
+            where: { id: parsedTypeId },
             select: {
               id: true
             }
@@ -77,7 +85,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
             });
           }
 
-          modelTypeId = modelType.id;
+          modelTypeId = parsedTypeId;
         }
 
         const models = await prisma.model.findMany({
