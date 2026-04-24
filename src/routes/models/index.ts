@@ -4,7 +4,42 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export async function modelQueryRoutes(app: FastifyInstance) {
-  app.get('/', async (request, reply) => {
+  app.get(
+    '/',
+    {
+      schema: {
+        tags: ['Models'],
+        summary: 'Get all models',
+        response: {
+          200: {
+            description: 'Model list fetched successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'integer' },
+                    name: { type: 'string' },
+                    thumbnailUrl: { type: ['string', 'null'] },
+                    manualUrl: { type: ['string', 'null'] },
+                    ioFileUrl: { type: 'string' },
+                    model3dUrl: { type: 'string' },
+                    createdAt: { type: 'string', format: 'date-time' },
+                    modelTypeId: { type: ['integer', 'null'] },
+                    modelTypeName: { type: ['string', 'null'] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
     try {
       const models = await prisma.model.findMany({
         orderBy: { createdAt: 'desc' },
@@ -39,9 +74,51 @@ export async function modelQueryRoutes(app: FastifyInstance) {
         error: 'INTERNAL_ERROR'
       });
     }
-  });
+    }
+  );
 
-  app.get('/:id', async (request, reply) => {
+  app.get(
+    '/:id',
+    {
+      schema: {
+        tags: ['Models'],
+        summary: 'Get model detail by id',
+        params: {
+          type: 'object',
+          required: ['id'],
+          properties: {
+            id: { type: 'integer', minimum: 1 }
+          }
+        },
+        response: {
+          200: {
+            description: 'Model detail fetched successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'integer' },
+                  name: { type: 'string' },
+                  thumbnailUrl: { type: ['string', 'null'] },
+                  manualUrl: { type: ['string', 'null'] },
+                  ioFileUrl: { type: 'string' },
+                  model3dUrl: { type: 'string' },
+                  partsJson: { type: ['array', 'object', 'null'] },
+                  stepsJson: { type: ['array', 'object', 'null'] },
+                  createdAt: { type: 'string', format: 'date-time' },
+                  modelTypeId: { type: ['integer', 'null'] },
+                  modelTypeName: { type: ['string', 'null'] }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
       const modelId = Number(id);
@@ -96,7 +173,8 @@ export async function modelQueryRoutes(app: FastifyInstance) {
         error: 'INTERNAL_ERROR'
       });
     }
-  });
+    }
+  );
 }
 
 function toModelResponse<

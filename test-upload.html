@@ -35,6 +35,14 @@
       padding: 20px;
     }
 
+    .page-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
     h1 {
       margin: 0 0 14px;
       font-size: 24px;
@@ -178,6 +186,10 @@
       cursor: not-allowed;
     }
 
+    .btn-link {
+      background: #0f766e;
+    }
+
     .status {
       margin-top: 12px;
       padding: 10px;
@@ -254,8 +266,15 @@
 </head>
 <body>
   <div class="page">
-    <h1>BlockLab 接口测试页</h1>
-    <p class="hint">左侧：单个模型上传；右侧：模型查询与类型接口测试（返回 JSON 可滚动查看）</p>
+    <div class="page-head">
+      <div>
+        <h1>BlockLab 接口测试页</h1>
+        <p class="hint">本页仅保留上传、清理、删除、联动等操作流程；普通接口调试请跳转 Swagger UI。</p>
+      </div>
+      <div class="btn-row">
+        <button type="button" id="btnOpenSwaggerUi" class="btn-link">打开 Swagger UI</button>
+      </div>
+    </div>
 
     <div class="layout">
       <section class="panel">
@@ -325,40 +344,7 @@
       </section>
 
       <section class="panel">
-        <h2>右侧：接口调用测试</h2>
-
-        <div class="card">
-          <div class="card-head">
-            <h3>获取指定模型：<span class="api-inline">/api/models/:id</span></h3>
-            <div class="card-tools">
-              <button type="button" id="btnGetById">调用 GET</button>
-            </div>
-          </div>
-          <div class="api-row">
-            <div class="form-group">
-              <label for="modelIdInput">模型 ID</label>
-              <input type="number" id="modelIdInput" min="1" placeholder="例如：1">
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h3>获取所有模型：<span class="api-inline">/api/models</span></h3>
-            <div class="card-tools">
-              <button type="button" id="btnGetAll">调用 GET</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h3>获取所有类型：<span class="api-inline">/api/model-types</span></h3>
-            <div class="card-tools">
-              <button type="button" id="btnGetAllModelTypes">调用 GET</button>
-            </div>
-          </div>
-        </div>
+        <h2>右侧：操作流与结果</h2>
 
         <div class="card">
           <div class="card-head">
@@ -404,24 +390,6 @@
 
         <div class="card">
           <div class="card-head">
-            <h3>匹配模型：<span class="api-inline">/api/recognition/json-match</span></h3>
-            <div class="card-tools">
-              <button type="button" id="btnMatchModels">调用 POST</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="matchPayloadInput">请求 JSON（零件名称+数量）</label>
-            <textarea id="matchPayloadInput">{
-  "parts": [
-    { "name": "Brick 1 x 2", "quantity": 2 },
-    { "name": "Plate 2 x 3", "quantity": 1 }
-  ]
-}</textarea>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
             <h3>图片识别匹配：<span class="api-inline">/api/recognition/match</span></h3>
             <div class="card-tools">
               <button type="button" id="btnImageMatch">调用 POST</button>
@@ -458,40 +426,18 @@
           </div>
         </div>
 
-        <div class="card">
-          <div class="card-head">
-            <h3>用户登录：<span class="api-inline">/api/auth/login</span></h3>
-            <div class="card-tools">
-              <button type="button" id="btnLogin">调用 POST</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="loginUnionIdInput">unionId（华为账号）</label>
-            <input type="text" id="loginUnionIdInput" placeholder="例如：abc123xyz">
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <h3>获取所有用户：<span class="api-inline">/api/auth/users</span></h3>
-            <div class="card-tools">
-              <button type="button" id="btnGetAllUsers">调用 GET</button>
-            </div>
-          </div>
-        </div>
-
         <div id="apiStatus" class="status"></div>
-        <div class="json-title">接口返回 JSON</div>
+        <div class="json-title">操作结果 JSON</div>
         <pre id="apiJsonOutput" class="json-box">{}</pre>
       </section>
     </div>
   </div>
 
   <script>
+    const SWAGGER_UI_URL = '/docs';
     const API_UPLOAD_URL = '/api/admin/models/upload';
     const API_CREATE_URL = '/api/admin/models/create';
     const API_CREATE_MODEL_TYPE_URL = '/api/admin/model-types/create';
-    const API_MODELS_URL = '/api/models';
     const API_MODEL_TYPES_URL = '/api/model-types';
     const API_CLEAR_MODELS_URL = '/api/admin/data/clear-models';
     const API_CLEAR_MODEL_TYPES_URL = '/api/admin/data/clear-model-types';
@@ -499,8 +445,6 @@
     const API_DELETE_MODEL_URL = '/api/admin/data/delete-model';
     const API_DELETE_MODEL_TYPE_URL = '/api/admin/data/delete-model-type';
     const API_DELETE_USER_URL = '/api/admin/data/delete-user';
-    const API_USERS_URL = '/api/auth/users';
-    const API_RECOGNITION_MATCH_URL = '/api/recognition/json-match';
     const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/match';
 
     function setStatus(el, type, text) {
@@ -729,34 +673,6 @@
       }
     });
 
-    async function callApi(url) {
-      const statusEl = document.getElementById('apiStatus');
-      const startedAt = performance.now();
-      setStatus(statusEl, 'loading', `请求中：${url}`);
-
-      try {
-        const response = await fetch(url, { method: 'GET' });
-        let data = {};
-        try {
-          data = await response.json();
-        } catch (_) {
-          throw new Error(`接口返回非 JSON（HTTP ${response.status}）`);
-        }
-
-        setJsonOutput(data);
-
-        if (!response.ok || data.success === false) {
-          setStatus(statusEl, 'error', `请求失败（HTTP ${response.status}）\n调用耗时：${formatElapsed(startedAt)}`);
-          return;
-        }
-
-        setStatus(statusEl, 'success', `请求成功（HTTP ${response.status}）\n调用耗时：${formatElapsed(startedAt)}`);
-      } catch (error) {
-        setJsonOutput({ success: false, message: error.message });
-        setStatus(statusEl, 'error', `请求失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
-      }
-    }
-
     async function callPostApi(url, payload) {
       const statusEl = document.getElementById('apiStatus');
       const startedAt = performance.now();
@@ -848,24 +764,8 @@
       }
     }
 
-    document.getElementById('btnGetById').addEventListener('click', async () => {
-      const idVal = document.getElementById('modelIdInput').value;
-      const modelId = Number(idVal);
-      if (!Number.isInteger(modelId) || modelId <= 0) {
-        const statusEl = document.getElementById('apiStatus');
-        setStatus(statusEl, 'error', '请输入合法的模型 ID（正整数）');
-        return;
-      }
-      await callApi(`${API_MODELS_URL}/${modelId}`);
-    });
-
-    document.getElementById('btnGetAll').addEventListener('click', async () => {
-      await callApi(API_MODELS_URL);
-    });
-
-    document.getElementById('btnGetAllModelTypes').addEventListener('click', async () => {
-      await callApi(API_MODEL_TYPES_URL);
-      await loadModelTypesForUpload();
+    document.getElementById('btnOpenSwaggerUi').addEventListener('click', () => {
+      window.open(SWAGGER_UI_URL, '_blank', 'noopener');
     });
 
     document.getElementById('btnClearModels').addEventListener('click', async () => {
@@ -959,31 +859,6 @@
         confirmText: `确定要删除用户 ID=${id} 吗？此操作不可恢复。`,
         successText: `用户 ID=${id} 删除请求已完成`
       });
-    });
-
-    document.getElementById('btnMatchModels').addEventListener('click', async () => {
-      const input = document.getElementById('matchPayloadInput').value;
-      try {
-        const payload = JSON.parse(input);
-        await callPostApi(API_RECOGNITION_MATCH_URL, payload);
-      } catch (error) {
-        const statusEl = document.getElementById('apiStatus');
-        setStatus(statusEl, 'error', `请求 JSON 解析失败\n错误信息：${error.message}`);
-      }
-    });
-
-    document.getElementById('btnLogin').addEventListener('click', async () => {
-      const unionId = document.getElementById('loginUnionIdInput').value.trim();
-      const statusEl = document.getElementById('apiStatus');
-      if (!unionId) {
-        setStatus(statusEl, 'error', '请输入 unionId');
-        return;
-      }
-      await callPostApi('/api/auth/login', { unionId });
-    });
-
-    document.getElementById('btnGetAllUsers').addEventListener('click', async () => {
-      await callApi(API_USERS_URL);
     });
 
     document.getElementById('btnImageMatch').addEventListener('click', async () => {

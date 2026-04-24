@@ -31,7 +31,57 @@ type ScoredMatch = {
 };
 
 export async function recognitionMatchRoutes(app: FastifyInstance) {
-  app.post('/json-match', async (request, reply) => {
+  app.post(
+    '/json-match',
+    {
+      schema: {
+        tags: ['Recognition'],
+        summary: 'Match model candidates by parts JSON',
+        body: {
+          type: 'object',
+          required: ['parts'],
+          properties: {
+            parts: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  quantity: { type: 'integer', minimum: 1 }
+                }
+              }
+            }
+          }
+        },
+        response: {
+          200: {
+            description: 'Recognition matching completed',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'integer' },
+                    name: { type: 'string' },
+                    thumbnailUrl: { type: ['string', 'null'] },
+                    manualUrl: { type: ['string', 'null'] },
+                    ioFileUrl: { type: 'string' },
+                    model3dUrl: { type: 'string' },
+                    matchType: { type: 'string', enum: ['exact', 'fuzzy'] },
+                    score: { type: 'number' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
     try {
       const inputParts = parseInputParts((request.body as { parts?: unknown })?.parts);
       if (inputParts.length === 0) {
@@ -149,7 +199,8 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
         error: 'INTERNAL_ERROR'
       });
     }
-  });
+    }
+  );
 }
 
 function parseInputParts(parts: unknown): InputPart[] {

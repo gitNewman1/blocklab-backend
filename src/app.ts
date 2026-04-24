@@ -9,6 +9,7 @@ import { recognitionImageMatchRoutes } from './routes/recognition/image-match';
 import { modelQueryRoutes } from './routes/models';
 import { authRoutes } from './routes/auth/login';
 import { modelTypeRoutes } from './routes/model-types';
+import { registerSwagger } from './plugins/swagger';
 import { config } from './config';
 
 export async function buildApp() {
@@ -22,6 +23,7 @@ export async function buildApp() {
       fileSize: config.storage.maxFileSizeMb * 1024 * 1024
     }
   });
+  await registerSwagger(app);
 
   app.get('/health', async () => {
     return { status: 'ok' };

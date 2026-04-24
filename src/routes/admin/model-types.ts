@@ -4,7 +4,40 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export async function adminModelTypeRoutes(app: FastifyInstance) {
-  app.post('/create', async (request, reply) => {
+  app.post(
+    '/create',
+    {
+      schema: {
+        tags: ['Model Types'],
+        summary: 'Create a model type',
+        body: {
+          type: 'object',
+          required: ['name'],
+          properties: {
+            name: { type: 'string', minLength: 1 }
+          }
+        },
+        response: {
+          200: {
+            description: 'Model type created successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              data: {
+                type: 'object',
+                properties: {
+                  id: { type: 'integer' },
+                  name: { type: 'string' },
+                  createdAt: { type: 'string', format: 'date-time' }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
     try {
       const body = (request.body || {}) as { name?: unknown };
       const name = typeof body.name === 'string' ? body.name.trim() : '';
@@ -58,5 +91,6 @@ export async function adminModelTypeRoutes(app: FastifyInstance) {
         error: 'INTERNAL_ERROR'
       });
     }
-  });
+    }
+  );
 }

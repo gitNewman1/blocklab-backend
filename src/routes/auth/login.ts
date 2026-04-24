@@ -4,7 +4,32 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post('/login', async (request, reply) => {
+  app.post(
+    '/login',
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'Login or create a user by unionId',
+        body: {
+          type: 'object',
+          required: ['unionId'],
+          properties: {
+            unionId: { type: 'string', minLength: 1 }
+          }
+        },
+        response: {
+          200: {
+            description: 'Login successful',
+            type: 'object',
+            properties: {
+              userId: { type: 'string' },
+              isNewUser: { type: 'boolean' }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
     const { unionId } = request.body as { unionId: string };
 
     if (!unionId) {
@@ -19,9 +44,39 @@ export async function authRoutes(app: FastifyInstance) {
 
     const user = await prisma.user.create({ data: { unionId } });
     return { userId: user.id, isNewUser: true };
-  });
+    }
+  );
 
-  app.get('/users', async (request, reply) => {
+  app.get(
+    '/users',
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'Get all users',
+        response: {
+          200: {
+            description: 'Users fetched successfully',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              data: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    unionId: { type: 'string' },
+                    createdAt: { type: 'string', format: 'date-time' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
     try {
       const users = await prisma.user.findMany({
         orderBy: { createdAt: 'desc' },
@@ -45,5 +100,6 @@ export async function authRoutes(app: FastifyInstance) {
         error: 'INTERNAL_ERROR'
       });
     }
-  });
+    }
+  );
 }
