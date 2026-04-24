@@ -9,7 +9,7 @@ export async function authRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Auth'],
-        summary: 'Login or create a user by unionId',
+        summary: '根据 unionId 登录或自动创建用户',
         body: {
           type: 'object',
           required: ['unionId'],
@@ -19,7 +19,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
         response: {
           200: {
-            description: 'Login successful',
+            description: '登录成功',
             type: 'object',
             properties: {
               userId: { type: 'string' },
@@ -52,10 +52,10 @@ export async function authRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Auth'],
-        summary: 'Get all users',
+        summary: '获取所有用户',
         response: {
           200: {
-            description: 'Users fetched successfully',
+            description: '成功返回用户列表',
             type: 'object',
             properties: {
               success: { type: 'boolean' },

@@ -9,10 +9,10 @@ export async function modelTypeRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Model Types'],
-        summary: 'Get all model types',
+        summary: '获取所有模型类型',
         response: {
           200: {
-            description: 'Model types fetched successfully',
+            description: '成功返回模型类型列表',
             type: 'object',
             properties: {
               success: { type: 'boolean' },

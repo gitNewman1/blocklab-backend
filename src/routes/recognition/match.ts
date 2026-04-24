@@ -36,7 +36,7 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Recognition'],
-        summary: 'Match model candidates by parts JSON',
+        summary: '根据零件 JSON 匹配候选模型',
         body: {
           type: 'object',
           required: ['parts'],
@@ -55,7 +55,7 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
         },
         response: {
           200: {
-            description: 'Recognition matching completed',
+            description: '成功返回匹配结果',
             type: 'object',
             properties: {
               success: { type: 'boolean' },

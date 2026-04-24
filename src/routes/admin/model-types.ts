@@ -9,7 +9,7 @@ export async function adminModelTypeRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Model Types'],
-        summary: 'Create a model type',
+        summary: '新增模型类型',
         body: {
           type: 'object',
           required: ['name'],
@@ -19,7 +19,7 @@ export async function adminModelTypeRoutes(app: FastifyInstance) {
         },
         response: {
           200: {
-            description: 'Model type created successfully',
+            description: '成功创建模型类型',
             type: 'object',
             properties: {
               success: { type: 'boolean' },

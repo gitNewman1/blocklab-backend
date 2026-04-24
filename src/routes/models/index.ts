@@ -9,10 +9,10 @@ export async function modelQueryRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Models'],
-        summary: 'Get all models',
+        summary: '获取所有模型',
         response: {
           200: {
-            description: 'Model list fetched successfully',
+            description: '成功返回模型列表',
             type: 'object',
             properties: {
               success: { type: 'boolean' },
@@ -82,7 +82,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ['Models'],
-        summary: 'Get model detail by id',
+        summary: '根据 ID 获取模型详情',
         params: {
           type: 'object',
           required: ['id'],
@@ -92,7 +92,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
         },
         response: {
           200: {
-            description: 'Model detail fetched successfully',
+            description: '成功返回模型详情',
             type: 'object',
             properties: {
               success: { type: 'boolean' },
