@@ -471,6 +471,15 @@
           </div>
         </div>
 
+        <div class="card">
+          <div class="card-head">
+            <h3>获取所有用户：<span class="api-inline">/api/auth/users</span></h3>
+            <div class="card-tools">
+              <button type="button" id="btnGetAllUsers">调用 GET</button>
+            </div>
+          </div>
+        </div>
+
         <div id="apiStatus" class="status"></div>
         <div class="json-title">接口返回 JSON</div>
         <pre id="apiJsonOutput" class="json-box">{}</pre>
@@ -490,6 +499,7 @@
     const API_DELETE_MODEL_URL = '/api/admin/data/delete-model';
     const API_DELETE_MODEL_TYPE_URL = '/api/admin/data/delete-model-type';
     const API_DELETE_USER_URL = '/api/admin/data/delete-user';
+    const API_USERS_URL = '/api/auth/users';
     const API_RECOGNITION_MATCH_URL = '/api/recognition/json-match';
     const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/match';
 
@@ -970,6 +980,10 @@
         return;
       }
       await callPostApi('/api/auth/login', { unionId });
+    });
+
+    document.getElementById('btnGetAllUsers').addEventListener('click', async () => {
+      await callApi(API_USERS_URL);
     });
 
     document.getElementById('btnImageMatch').addEventListener('click', async () => {
