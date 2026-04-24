@@ -15,14 +15,21 @@ export async function modelQueryRoutes(app: FastifyInstance) {
           manualUrl: true,
           ioFileUrl: true,
           model3dUrl: true,
-          createdAt: true
+          createdAt: true,
+          modelTypeId: true,
+          modelType: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
         }
       });
 
       return reply.send({
         success: true,
         message: 'Models fetched successfully',
-        data: models
+        data: models.map(toModelResponse)
       });
     } catch (error: any) {
       request.log.error({ error: error.message, stack: error.stack }, 'Fetch models failed');
@@ -57,7 +64,14 @@ export async function modelQueryRoutes(app: FastifyInstance) {
           model3dUrl: true,
           partsJson: true,
           stepsJson: true,
-          createdAt: true
+          createdAt: true,
+          modelTypeId: true,
+          modelType: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
         }
       });
 
@@ -72,7 +86,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
       return reply.send({
         success: true,
         message: 'Model fetched successfully',
-        data: model
+        data: toModelResponse(model)
       });
     } catch (error: any) {
       request.log.error({ error: error.message, stack: error.stack }, 'Fetch model detail failed');
@@ -83,4 +97,34 @@ export async function modelQueryRoutes(app: FastifyInstance) {
       });
     }
   });
+}
+
+function toModelResponse<
+  T extends {
+    id: number;
+    name: string;
+    thumbnailUrl: string | null;
+    manualUrl: string | null;
+    ioFileUrl: string;
+    model3dUrl: string;
+    createdAt: Date;
+    partsJson?: unknown;
+    stepsJson?: unknown;
+    modelTypeId: number | null;
+    modelType: { id: number; name: string } | null;
+  }
+>(model: T) {
+  return {
+    id: model.id,
+    name: model.name,
+    thumbnailUrl: model.thumbnailUrl,
+    manualUrl: model.manualUrl,
+    ioFileUrl: model.ioFileUrl,
+    model3dUrl: model.model3dUrl,
+    createdAt: model.createdAt,
+    ...(Object.prototype.hasOwnProperty.call(model, 'partsJson') ? { partsJson: model.partsJson } : {}),
+    ...(Object.prototype.hasOwnProperty.call(model, 'stepsJson') ? { stepsJson: model.stepsJson } : {}),
+    modelTypeId: model.modelType?.id ?? model.modelTypeId ?? null,
+    modelTypeName: model.modelType?.name ?? null
+  };
 }

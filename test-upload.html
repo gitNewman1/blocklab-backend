@@ -139,6 +139,7 @@
 
     input[type="text"],
     input[type="number"],
+    select,
     input[type="file"],
     textarea {
       width: 100%;
@@ -190,6 +191,13 @@
     .success { background: var(--ok-bg); border: 1px solid var(--ok-bd); color: var(--ok-tx); }
     .error { background: var(--err-bg); border: 1px solid var(--err-bd); color: var(--err-tx); }
     .loading { background: var(--loading-bg); border: 1px solid var(--loading-bd); color: var(--loading-tx); }
+
+    .field-hint {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #666;
+      line-height: 1.5;
+    }
 
     .json-title {
       margin: 8px 0;
@@ -248,8 +256,11 @@
           </div>
 
           <div class="form-group">
-            <label for="modelTypeId">模型类型 ID</label>
-            <input type="number" id="modelTypeId" name="model_type_id" min="1" required placeholder="例如：1">
+            <label for="modelTypeSelect">模型类型</label>
+            <select id="modelTypeSelect" name="model_type_id" required>
+              <option value="">正在加载类型...</option>
+            </select>
+            <div id="modelTypeHint" class="field-hint">页面加载后会自动从服务器获取类型列表。</div>
           </div>
 
           <div class="form-group">
@@ -427,16 +438,82 @@
       return `${elapsedMs.toFixed(0)} ms`;
     }
 
+    function setModelTypeHint(text) {
+      document.getElementById('modelTypeHint').textContent = text;
+    }
+
+    function populateModelTypeOptions(modelTypes) {
+      const select = document.getElementById('modelTypeSelect');
+      select.innerHTML = '';
+
+      if (!Array.isArray(modelTypes) || modelTypes.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '暂无可选类型';
+        select.appendChild(option);
+        select.value = '';
+        setModelTypeHint('当前没有可选类型，建议先添加类型。');
+        return;
+      }
+
+      const placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '请选择模型类型';
+      select.appendChild(placeholder);
+
+      for (const modelType of modelTypes) {
+        const option = document.createElement('option');
+        option.value = String(modelType.id);
+        option.textContent = modelType.name;
+        select.appendChild(option);
+      }
+
+      select.value = '';
+      setModelTypeHint(`已加载 ${modelTypes.length} 个类型。下拉框只显示类型名称，上传时仅提交类型 ID。`);
+    }
+
+    async function loadModelTypesForUpload() {
+      const select = document.getElementById('modelTypeSelect');
+      select.disabled = true;
+      setModelTypeHint('正在从服务器加载类型列表...');
+
+      try {
+        const response = await fetch(API_MODEL_TYPES_URL, { method: 'GET' });
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (_) {
+          throw new Error(`类型接口返回非 JSON（HTTP ${response.status}）`);
+        }
+
+        if (!response.ok || data.success === false) {
+          throw new Error(data.message || `HTTP ${response.status}`);
+        }
+
+        populateModelTypeOptions(Array.isArray(data.data) ? data.data : []);
+      } catch (error) {
+        select.innerHTML = '<option value="">加载失败</option>';
+        select.value = '';
+        setModelTypeHint(`类型列表加载失败：${error.message}`);
+      } finally {
+        select.disabled = false;
+      }
+    }
+
     async function uploadModel({ confirmDuplicate = false, confirmExactMatch = false }) {
       const nameInput = document.getElementById('name');
-      const modelTypeIdInput = document.getElementById('modelTypeId');
+      const modelTypeSelect = document.getElementById('modelTypeSelect');
       const ioInput = document.getElementById('ioFile');
       const glbInput = document.getElementById('glbFile');
       const manualInput = document.getElementById('manualFile');
 
+      if (!modelTypeSelect.value) {
+        throw new Error('当前没有可用类型，请先添加类型后再上传模型');
+      }
+
       const formData = new FormData();
       formData.append('name', nameInput.value);
-      formData.append('model_type_id', modelTypeIdInput.value);
+      formData.append('model_type_id', modelTypeSelect.value);
       formData.append('io_file', ioInput.files[0]);
       formData.append('glb_file', glbInput.files[0]);
       if (manualInput.files[0]) {
@@ -631,6 +708,7 @@
 
     document.getElementById('btnGetAllModelTypes').addEventListener('click', async () => {
       await callApi(API_MODEL_TYPES_URL);
+      await loadModelTypesForUpload();
     });
 
     document.getElementById('btnMatchModels').addEventListener('click', async () => {
@@ -736,6 +814,8 @@
         setStatus(statusEl, 'error', `请求失败：${e.message}`);
       }
     });
+
+    loadModelTypesForUpload();
   </script>
 </body>
 </html>
