@@ -261,6 +261,16 @@
       <section class="panel">
         <h2>左侧：单个模型上传</h2>
 
+        <div class="card" id="createModelTypeCard">
+          <h3>添加模型类型 <span class="api-inline">/api/admin/model-types/create</span></h3>
+          <div class="form-group">
+            <label for="createModelTypeName">类型名称</label>
+            <input type="text" id="createModelTypeName" placeholder="例如：交通工具">
+          </div>
+          <button type="button" id="btnCreateModelType">添加类型</button>
+          <div id="createModelTypeStatus" class="status"></div>
+        </div>
+
         <form id="uploadForm" class="card">
           <h3>单个模型上传 <span class="api-inline">/api/admin/models/upload</span></h3>
 
@@ -471,6 +481,7 @@
   <script>
     const API_UPLOAD_URL = '/api/admin/models/upload';
     const API_CREATE_URL = '/api/admin/models/create';
+    const API_CREATE_MODEL_TYPE_URL = '/api/admin/model-types/create';
     const API_MODELS_URL = '/api/models';
     const API_MODEL_TYPES_URL = '/api/model-types';
     const API_CLEAR_MODELS_URL = '/api/admin/data/clear-models';
@@ -655,6 +666,56 @@
         setStatus(statusEl, 'error', `上传失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
       } finally {
         submitBtn.disabled = false;
+      }
+    });
+
+    document.getElementById('btnCreateModelType').addEventListener('click', async () => {
+      const statusEl = document.getElementById('createModelTypeStatus');
+      const name = document.getElementById('createModelTypeName').value.trim();
+      const startedAt = performance.now();
+
+      if (!name) {
+        setStatus(statusEl, 'error', '请填写类型名称');
+        return;
+      }
+
+      setStatus(statusEl, 'loading', '正在添加类型...');
+
+      try {
+        const response = await fetch(API_CREATE_MODEL_TYPE_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ name })
+        });
+
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (_) {
+          throw new Error(`接口返回非 JSON（HTTP ${response.status}）`);
+        }
+
+        setJsonOutput(data);
+
+        if (!response.ok || !data.success) {
+          setStatus(
+            statusEl,
+            'error',
+            `添加失败\n错误信息：${data.message || `HTTP ${response.status}`}\n调用耗时：${formatElapsed(startedAt)}`
+          );
+          return;
+        }
+
+        await loadModelTypesForUpload();
+        setStatus(
+          statusEl,
+          'success',
+          `添加成功\n类型 ID：${data.data.id}\n类型名称：${data.data.name}\n调用耗时：${formatElapsed(startedAt)}`
+        );
+      } catch (error) {
+        setStatus(statusEl, 'error', `添加失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
       }
     });
 
