@@ -26,6 +26,19 @@ export class LocalStorageService {
     return `${base}/static/${relativePath}`;
   }
 
+  async clearFolders(folders: string[]): Promise<void> {
+    for (const folder of folders) {
+      const absolutePath = path.join(config.storage.uploadRoot, folder);
+      await fs.promises.mkdir(absolutePath, { recursive: true });
+      const entries = await fs.promises.readdir(absolutePath);
+      await Promise.all(
+        entries.map((entry) =>
+          fs.promises.rm(path.join(absolutePath, entry), { recursive: true, force: true })
+        )
+      );
+    }
+  }
+
   private ensureBaseFolders(): void {
     const folders = ['io-files', 'models-3d', 'thumbnails', 'manuals', 'posts', 'recognition-images'];
     for (const folder of folders) {

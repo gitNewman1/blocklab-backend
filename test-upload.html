@@ -199,6 +199,20 @@
       line-height: 1.5;
     }
 
+    .inline-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 13px;
+      color: #334155;
+      font-weight: normal;
+    }
+
+    .inline-check input {
+      margin: 0;
+    }
+
     .json-title {
       margin: 8px 0;
       font-size: 14px;
@@ -338,6 +352,21 @@
 
         <div class="card">
           <div class="card-head">
+            <h3>数据清理：<span class="api-inline">/api/admin/data/*</span></h3>
+          </div>
+          <div class="btn-row">
+            <button type="button" id="btnClearModels">清空模型数据</button>
+            <button type="button" id="btnClearModelTypes">清空类型数据</button>
+            <button type="button" id="btnClearUsers">清空用户数据</button>
+          </div>
+          <label class="inline-check">
+            <input type="checkbox" id="deleteModelFilesInput">
+            清空模型数据时，同时删除 uploads/io-files、models-3d、thumbnails、manuals 中的历史文件
+          </label>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
             <h3>匹配模型：<span class="api-inline">/api/recognition/json-match</span></h3>
             <div class="card-tools">
               <button type="button" id="btnMatchModels">调用 POST</button>
@@ -417,6 +446,9 @@
     const API_CREATE_URL = '/api/admin/models/create';
     const API_MODELS_URL = '/api/models';
     const API_MODEL_TYPES_URL = '/api/model-types';
+    const API_CLEAR_MODELS_URL = '/api/admin/data/clear-models';
+    const API_CLEAR_MODEL_TYPES_URL = '/api/admin/data/clear-model-types';
+    const API_CLEAR_USERS_URL = '/api/admin/data/clear-users';
     const API_RECOGNITION_MATCH_URL = '/api/recognition/json-match';
     const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/match';
 
@@ -659,6 +691,30 @@
       }
     }
 
+    async function confirmAndClearData({ url, payload, confirmText, successText, onSuccess }) {
+      const statusEl = document.getElementById('apiStatus');
+      const confirmed = window.confirm(confirmText);
+      if (!confirmed) {
+        setStatus(statusEl, 'error', '你已取消本次清理操作');
+        return;
+      }
+
+      await callPostApi(url, payload);
+
+      const output = document.getElementById('apiJsonOutput').textContent;
+      try {
+        const parsed = JSON.parse(output || '{}');
+        if (parsed.success) {
+          setStatus(statusEl, 'success', successText);
+          if (typeof onSuccess === 'function') {
+            await onSuccess(parsed);
+          }
+        }
+      } catch (_) {
+        // Ignore JSON parse failure because callPostApi already handles display.
+      }
+    }
+
     async function callPostMultipartApi(url, formData) {
       const statusEl = document.getElementById('apiStatus');
       const startedAt = performance.now();
@@ -709,6 +765,42 @@
     document.getElementById('btnGetAllModelTypes').addEventListener('click', async () => {
       await callApi(API_MODEL_TYPES_URL);
       await loadModelTypesForUpload();
+    });
+
+    document.getElementById('btnClearModels').addEventListener('click', async () => {
+      const deleteFiles = document.getElementById('deleteModelFilesInput').checked;
+      await confirmAndClearData({
+        url: API_CLEAR_MODELS_URL,
+        payload: { deleteFiles },
+        confirmText: deleteFiles
+          ? '确定要清空所有模型数据，并删除模型上传文件吗？此操作不可恢复。'
+          : '确定要清空所有模型数据吗？此操作不可恢复。',
+        successText: deleteFiles ? '模型数据和模型文件清理请求已完成' : '模型数据清理请求已完成',
+        onSuccess: async () => {
+          await loadModelTypesForUpload();
+        }
+      });
+    });
+
+    document.getElementById('btnClearModelTypes').addEventListener('click', async () => {
+      await confirmAndClearData({
+        url: API_CLEAR_MODEL_TYPES_URL,
+        payload: {},
+        confirmText: '确定要清空所有类型数据吗？模型上的类型关联会被清空。此操作不可恢复。',
+        successText: '类型数据清理请求已完成',
+        onSuccess: async () => {
+          await loadModelTypesForUpload();
+        }
+      });
+    });
+
+    document.getElementById('btnClearUsers').addEventListener('click', async () => {
+      await confirmAndClearData({
+        url: API_CLEAR_USERS_URL,
+        payload: {},
+        confirmText: '确定要清空所有用户数据吗？此操作不可恢复。',
+        successText: '用户数据清理请求已完成'
+      });
     });
 
     document.getElementById('btnMatchModels').addEventListener('click', async () => {

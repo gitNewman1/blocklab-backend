@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { modelsRoutes } from './routes/admin/models';
+import { dataManagementRoutes } from './routes/admin/data-management';
 import { recognitionMatchRoutes } from './routes/recognition/match';
 import { recognitionImageMatchRoutes } from './routes/recognition/image-match';
 import { modelQueryRoutes } from './routes/models';
@@ -26,6 +27,7 @@ export async function buildApp() {
   });
 
   await app.register(modelsRoutes, { prefix: '/api/admin/models' });
+  await app.register(dataManagementRoutes, { prefix: '/api/admin/data' });
   await app.register(recognitionMatchRoutes, { prefix: '/api/recognition' });
   await app.register(recognitionImageMatchRoutes, { prefix: '/api/recognition' });
   await app.register(modelQueryRoutes, { prefix: '/api/models' });
