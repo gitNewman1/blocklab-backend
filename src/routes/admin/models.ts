@@ -19,6 +19,7 @@ export async function modelsRoutes(app: FastifyInstance) {
       const parts = request.parts();
       const files: Record<string, UploadedFile> = {};
       let name = '';
+      let modelTypeId: number | null = null;
       let confirmDuplicate = false;
       let confirmExactMatch = false;
 
@@ -37,6 +38,10 @@ export async function modelsRoutes(app: FastifyInstance) {
         if (part.fieldname === 'name') {
           name = String(part.value || '');
         }
+        if (part.fieldname === 'model_type_id') {
+          const parsedModelTypeId = Number(part.value);
+          modelTypeId = Number.isInteger(parsedModelTypeId) && parsedModelTypeId > 0 ? parsedModelTypeId : null;
+        }
         if (part.fieldname === 'confirm_duplicate') {
           const raw = String(part.value || '').toLowerCase();
           confirmDuplicate = raw === 'true' || raw === '1' || raw === 'yes';
@@ -47,10 +52,10 @@ export async function modelsRoutes(app: FastifyInstance) {
         }
       }
 
-      if (!name || !files.io_file || !files.glb_file) {
+      if (!name || !modelTypeId || !files.io_file || !files.glb_file) {
         return reply.code(400).send({
           success: false,
-          message: 'Missing required fields: name, io_file, glb_file',
+          message: 'Missing required fields: name, model_type_id, io_file, glb_file',
           error: 'MISSING_REQUIRED_FIELD'
         });
       }
@@ -73,6 +78,18 @@ export async function modelsRoutes(app: FastifyInstance) {
           success: false,
           message: 'manual_file must be a .pdf file',
           error: 'INVALID_MANUAL_FILE'
+        });
+      }
+
+      const modelType = await prisma.modelType.findUnique({
+        where: { id: modelTypeId },
+        select: { id: true, name: true }
+      });
+      if (!modelType) {
+        return reply.code(400).send({
+          success: false,
+          message: 'model_type_id does not exist',
+          error: 'INVALID_MODEL_TYPE_ID'
         });
       }
 
@@ -148,6 +165,7 @@ export async function modelsRoutes(app: FastifyInstance) {
       const model = await prisma.model.create({
         data: {
           name,
+          modelTypeId,
           thumbnailUrl: thumbUrl,
           manualUrl,
           ioFileUrl: ioUrl,

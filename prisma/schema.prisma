@@ -10,6 +10,7 @@ datasource db {
 model Model {
   id           Int      @id @default(autoincrement())
   name         String   @db.VarChar(100)
+  modelTypeId  Int?     @map("model_type_id")
   thumbnailUrl String?  @map("thumbnail_url")
   manualUrl    String?  @map("manual_url")
   ioFileUrl    String   @map("io_file_url")
@@ -17,9 +18,11 @@ model Model {
   partsJson    Json     @map("parts_json")
   stepsJson    Json     @map("steps_json")
   createdAt    DateTime @default(now()) @map("created_at")
+  modelType    ModelType? @relation(fields: [modelTypeId], references: [id])
 
   @@map("models")
   @@index([createdAt(sort: Desc)])
+  @@index([modelTypeId])
 }
 
 model User {
@@ -28,4 +31,14 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("users")
+}
+
+model ModelType {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at")
+  models    Model[]
+
+  @@map("model_types")
+  @@index([createdAt(sort: Desc)])
 }

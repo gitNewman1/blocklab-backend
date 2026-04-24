@@ -6,6 +6,7 @@ import { recognitionMatchRoutes } from './routes/recognition/match';
 import { recognitionImageMatchRoutes } from './routes/recognition/image-match';
 import { modelQueryRoutes } from './routes/models';
 import { authRoutes } from './routes/auth/login';
+import { modelTypeRoutes } from './routes/model-types';
 import { config } from './config';
 
 export async function buildApp() {
@@ -28,6 +29,7 @@ export async function buildApp() {
   await app.register(recognitionMatchRoutes, { prefix: '/api/recognition' });
   await app.register(recognitionImageMatchRoutes, { prefix: '/api/recognition' });
   await app.register(modelQueryRoutes, { prefix: '/api/models' });
+  await app.register(modelTypeRoutes, { prefix: '/api/model-types' });
   await app.register(authRoutes, { prefix: '/api/auth' });
 
   return app;

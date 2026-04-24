@@ -233,18 +233,23 @@
 <body>
   <div class="page">
     <h1>BlockLab 接口测试页</h1>
-    <p class="hint">左侧：模型上传；右侧：模型查询接口测试（返回 JSON 可滚动查看）</p>
+    <p class="hint">左侧：单个模型上传；右侧：模型查询与类型接口测试（返回 JSON 可滚动查看）</p>
 
     <div class="layout">
       <section class="panel">
-        <h2>左侧：文件上传</h2>
+        <h2>左侧：单个模型上传</h2>
 
         <form id="uploadForm" class="card">
-          <h3>上传模型文件</h3>
+          <h3>单个模型上传 <span class="api-inline">/api/admin/models/upload</span></h3>
 
           <div class="form-group">
             <label for="name">模型名称</label>
             <input type="text" id="name" name="name" required placeholder="例如：蜗牛模型">
+          </div>
+
+          <div class="form-group">
+            <label for="modelTypeId">模型类型 ID</label>
+            <input type="number" id="modelTypeId" name="model_type_id" min="1" required placeholder="例如：1">
           </div>
 
           <div class="form-group">
@@ -307,6 +312,15 @@
             <h3>获取所有模型：<span class="api-inline">/api/models</span></h3>
             <div class="card-tools">
               <button type="button" id="btnGetAll">调用 GET</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>获取所有类型：<span class="api-inline">/api/model-types</span></h3>
+            <div class="card-tools">
+              <button type="button" id="btnGetAllModelTypes">调用 GET</button>
             </div>
           </div>
         </div>
@@ -391,6 +405,7 @@
     const API_UPLOAD_URL = '/api/admin/models/upload';
     const API_CREATE_URL = '/api/admin/models/create';
     const API_MODELS_URL = '/api/models';
+    const API_MODEL_TYPES_URL = '/api/model-types';
     const API_RECOGNITION_MATCH_URL = '/api/recognition/json-match';
     const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/match';
 
@@ -414,12 +429,14 @@
 
     async function uploadModel({ confirmDuplicate = false, confirmExactMatch = false }) {
       const nameInput = document.getElementById('name');
+      const modelTypeIdInput = document.getElementById('modelTypeId');
       const ioInput = document.getElementById('ioFile');
       const glbInput = document.getElementById('glbFile');
       const manualInput = document.getElementById('manualFile');
 
       const formData = new FormData();
       formData.append('name', nameInput.value);
+      formData.append('model_type_id', modelTypeIdInput.value);
       formData.append('io_file', ioInput.files[0]);
       formData.append('glb_file', glbInput.files[0]);
       if (manualInput.files[0]) {
@@ -493,7 +510,7 @@
         setStatus(
           statusEl,
           'success',
-          `上传成功\n模型 ID：${data.data.id}\n模型名称：${data.data.name}\n说明书地址：${data.data.manualUrl || '无'}\n调用耗时：${formatElapsed(startedAt)}`
+          `上传成功\n模型 ID：${data.data.id}\n模型名称：${data.data.name}\n模型类型 ID：${data.data.modelTypeId || '无'}\n说明书地址：${data.data.manualUrl || '无'}\n调用耗时：${formatElapsed(startedAt)}`
         );
       } catch (error) {
         setStatus(statusEl, 'error', `上传失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
@@ -610,6 +627,10 @@
 
     document.getElementById('btnGetAll').addEventListener('click', async () => {
       await callApi(API_MODELS_URL);
+    });
+
+    document.getElementById('btnGetAllModelTypes').addEventListener('click', async () => {
+      await callApi(API_MODEL_TYPES_URL);
     });
 
     document.getElementById('btnMatchModels').addEventListener('click', async () => {
