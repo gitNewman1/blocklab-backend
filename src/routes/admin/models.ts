@@ -113,9 +113,11 @@ export async function modelsRoutes(app: FastifyInstance) {
       }
 
       const parsed = await ioParserService.parseIOFileBuffer(files.io_file.data);
+      const partCount = calculatePartCount(parsed.parts);
       request.log.info(
         {
           parsedPartsCount: parsed.parts.length,
+          partCount,
           parsedStepsCount: parsed.steps.length,
           ioThumbnailExtracted: !!parsed.extractedThumbnail
         },
@@ -170,6 +172,7 @@ export async function modelsRoutes(app: FastifyInstance) {
           manualUrl,
           ioFileUrl: ioUrl,
           model3dUrl: glbUrl,
+          partCount,
           partsJson: enrichedParts as any,
           stepsJson: parsed.steps as any
         }
@@ -214,6 +217,8 @@ export async function modelsRoutes(app: FastifyInstance) {
         return reply.code(400).send({ success: false, message: 'parts 不能为空', error: 'MISSING_REQUIRED_FIELD' });
       }
 
+      const partCount = calculatePartCount(parts);
+
       const enrichedParts = await rebrickableService.enrichParts(
         parts.map((p) => ({ id: p.designID, designID: p.designID, quantity: p.quantity })),
         request.log
@@ -224,6 +229,7 @@ export async function modelsRoutes(app: FastifyInstance) {
           name,
           ioFileUrl: '',
           model3dUrl: '',
+          partCount,
           partsJson: enrichedParts as any,
           stepsJson: [] as any
         }
@@ -338,4 +344,15 @@ function buildPartsSignature(parts: Part[]): string {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([designId, quantity]) => `${designId}:${quantity}`)
     .join('|');
+}
+
+function calculatePartCount(parts: Array<{ quantity: number }>): number {
+  let total = 0;
+  for (const part of parts) {
+    const quantity = Number(part.quantity) || 0;
+    if (quantity > 0) {
+      total += quantity;
+    }
+  }
+  return total;
 }

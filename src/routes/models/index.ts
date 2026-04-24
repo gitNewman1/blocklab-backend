@@ -24,6 +24,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
                   properties: {
                     id: { type: 'integer' },
                     name: { type: 'string' },
+                    partCount: { type: 'integer' },
                     thumbnailUrl: { type: ['string', 'null'] },
                     manualUrl: { type: ['string', 'null'] },
                     ioFileUrl: { type: 'string' },
@@ -46,6 +47,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
         select: {
           id: true,
           name: true,
+          partCount: true,
           thumbnailUrl: true,
           manualUrl: true,
           ioFileUrl: true,
@@ -102,6 +104,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
                 properties: {
                   id: { type: 'integer' },
                   name: { type: 'string' },
+                  partCount: { type: 'integer' },
                   thumbnailUrl: { type: ['string', 'null'] },
                   manualUrl: { type: ['string', 'null'] },
                   ioFileUrl: { type: 'string' },
@@ -135,6 +138,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
         select: {
           id: true,
           name: true,
+          partCount: true,
           thumbnailUrl: true,
           manualUrl: true,
           ioFileUrl: true,
@@ -181,6 +185,7 @@ function toModelResponse<
   T extends {
     id: number;
     name: string;
+    partCount: number;
     thumbnailUrl: string | null;
     manualUrl: string | null;
     ioFileUrl: string;
@@ -195,6 +200,7 @@ function toModelResponse<
   return {
     id: model.id,
     name: model.name,
+    partCount: model.partCount,
     thumbnailUrl: model.thumbnailUrl,
     manualUrl: model.manualUrl,
     ioFileUrl: model.ioFileUrl,
