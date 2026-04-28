@@ -7,6 +7,27 @@ const prisma = new PrismaClient();
 const storageService = new LocalStorageService();
 
 export async function recommendedModelsRoutes(app: FastifyInstance) {
+  app.get('/list', async (request, reply) => {
+    try {
+      const models = await prisma.recommendedModel.findMany({
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          setNumber: true,
+          name: true,
+          series: true,
+          partCount: true,
+          price: true,
+          ageRating: true,
+          coverUrl: true
+        }
+      });
+      return reply.send({ success: true, data: models });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
+
   app.post('/upload', async (request, reply) => {
     try {
       const parts = request.parts();
