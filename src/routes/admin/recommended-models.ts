@@ -7,7 +7,37 @@ const prisma = new PrismaClient();
 const storageService = new LocalStorageService();
 
 export async function recommendedModelsRoutes(app: FastifyInstance) {
-  app.get('/list', async (request, reply) => {
+  app.get('/list', {
+    schema: {
+      tags: ['Recommended Models'],
+      summary: '获取推荐模型列表',
+      response: {
+        200: {
+          description: '成功返回推荐模型列表',
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'integer' },
+                  setNumber: { type: 'string' },
+                  name: { type: 'string' },
+                  series: { type: 'string', nullable: true },
+                  partCount: { type: 'integer' },
+                  price: { type: 'string' },
+                  ageRating: { type: 'string', nullable: true },
+                  coverUrl: { type: 'string' }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
     try {
       const models = await prisma.recommendedModel.findMany({
         orderBy: { createdAt: 'desc' },
