@@ -64,6 +64,24 @@ model Work {
   @@index([createdAt(sort: Desc)])
 }
 
+model RecommendedModel {
+  id          Int      @id @default(autoincrement())
+  setNumber   String   @map("set_number") @db.VarChar(20)
+  name        String   @db.VarChar(100)
+  series      String?  @db.VarChar(50)
+  partCount   Int      @map("part_count")
+  price       Decimal  @db.Decimal(10, 2)
+  ageRating   String?  @map("age_rating") @db.VarChar(10)
+  description String?
+  coverUrl    String   @map("cover_url")
+  displayUrl  String   @map("display_url")
+  detailUrls  String[] @map("detail_urls")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("recommended_models")
+  @@index([createdAt(sort: Desc)])
+}
+
 model ModelType {
   id        Int      @id @default(autoincrement())
   name      String   @unique @db.VarChar(100)

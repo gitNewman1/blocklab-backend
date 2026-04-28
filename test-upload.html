@@ -325,6 +325,54 @@
           <div id="uploadStatus" class="status"></div>
         </form>
 
+        <form id="recommendedModelForm" class="card">
+          <h3>上传推荐模型 <span class="api-inline">/api/admin/recommended-models/upload</span></h3>
+
+          <div class="form-group">
+            <label for="rmSetNumber">模型编号</label>
+            <input type="text" id="rmSetNumber" placeholder="例如：75192" required>
+          </div>
+          <div class="form-group">
+            <label for="rmName">模型名称</label>
+            <input type="text" id="rmName" placeholder="例如：千年隼终极收藏系列" required>
+          </div>
+          <div class="form-group">
+            <label for="rmSeries">系列名称（可选）</label>
+            <input type="text" id="rmSeries" placeholder="例如：TECHIC SERIES">
+          </div>
+          <div class="form-group">
+            <label for="rmPartCount">零件个数</label>
+            <input type="number" id="rmPartCount" min="1" placeholder="例如：7541" required>
+          </div>
+          <div class="form-group">
+            <label for="rmPrice">价格（元）</label>
+            <input type="number" id="rmPrice" min="0" step="0.01" placeholder="例如：6999" required>
+          </div>
+          <div class="form-group">
+            <label for="rmAgeRating">适合年龄（可选）</label>
+            <input type="text" id="rmAgeRating" placeholder="例如：18+">
+          </div>
+          <div class="form-group">
+            <label for="rmDescription">模型描述语（可选）</label>
+            <textarea id="rmDescription" style="min-height:60px" placeholder="例如：精准工程：指尖上的竞速魂..."></textarea>
+          </div>
+          <div class="form-group">
+            <label for="rmCoverImage">封面图</label>
+            <input type="file" id="rmCoverImage" accept="image/*" required>
+          </div>
+          <div class="form-group">
+            <label for="rmDisplayImage">模型展示图</label>
+            <input type="file" id="rmDisplayImage" accept="image/*" required>
+          </div>
+          <div class="form-group">
+            <label for="rmDetailImages">模型细节图（可多张）</label>
+            <input type="file" id="rmDetailImages" accept="image/*" multiple>
+          </div>
+
+          <button type="submit" id="rmSubmitBtn">上传推荐模型</button>
+          <div id="rmStatus" class="status"></div>
+        </form>
+
         <div class="card" id="createModelCard">
           <h3>手动创建模型 <span class="api-inline">/api/admin/models/create</span></h3>
           <div class="form-group">
@@ -941,6 +989,46 @@
         }
       } catch (e) {
         setStatus(statusEl, 'error', `请求失败：${e.message}`);
+      }
+    });
+
+    document.getElementById('recommendedModelForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const statusEl = document.getElementById('rmStatus');
+      const submitBtn = document.getElementById('rmSubmitBtn');
+      const startedAt = performance.now();
+
+      submitBtn.disabled = true;
+      setStatus(statusEl, 'loading', '正在上传，请稍候...');
+
+      try {
+        const formData = new FormData();
+        formData.append('set_number', document.getElementById('rmSetNumber').value);
+        formData.append('name', document.getElementById('rmName').value);
+        formData.append('series', document.getElementById('rmSeries').value);
+        formData.append('part_count', document.getElementById('rmPartCount').value);
+        formData.append('price', document.getElementById('rmPrice').value);
+        formData.append('age_rating', document.getElementById('rmAgeRating').value);
+        formData.append('description', document.getElementById('rmDescription').value);
+        formData.append('cover_image', document.getElementById('rmCoverImage').files[0]);
+        formData.append('display_image', document.getElementById('rmDisplayImage').files[0]);
+        for (const file of document.getElementById('rmDetailImages').files) {
+          formData.append('detail_images', file);
+        }
+
+        const response = await fetch('/api/admin/recommended-models/upload', { method: 'POST', body: formData });
+        const data = await response.json();
+        setJsonOutput(data);
+
+        if (!response.ok || !data.success) {
+          setStatus(statusEl, 'error', `上传失败：${data.message}\n耗时：${formatElapsed(startedAt)}`);
+        } else {
+          setStatus(statusEl, 'success', `上传成功\nID：${data.data.id}\n耗时：${formatElapsed(startedAt)}`);
+        }
+      } catch (error) {
+        setStatus(statusEl, 'error', `请求失败：${error.message}`);
+      } finally {
+        submitBtn.disabled = false;
       }
     });
 
