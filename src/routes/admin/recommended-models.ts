@@ -29,7 +29,9 @@ export async function recommendedModelsRoutes(app: FastifyInstance) {
                   partCount: { type: 'integer' },
                   price: { type: 'string' },
                   ageRating: { type: 'string', nullable: true },
-                  coverUrl: { type: 'string' }
+                  coverUrl: { type: 'string' },
+                  displayUrl: { type: 'string' },
+                  detailUrls: { type: 'array', items: { type: 'string' } }
                 }
               }
             }
@@ -49,7 +51,9 @@ export async function recommendedModelsRoutes(app: FastifyInstance) {
           partCount: true,
           price: true,
           ageRating: true,
-          coverUrl: true
+          coverUrl: true,
+          displayUrl: true,
+          detailUrls: true
         }
       });
       return reply.send({ success: true, data: models });
