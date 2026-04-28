@@ -30,8 +30,38 @@ model User {
   id        String   @id @default(uuid())
   unionId   String   @unique @map("union_id")
   createdAt DateTime @default(now()) @map("created_at")
+  works     Work[]
 
   @@map("users")
+}
+
+enum WorkCategory {
+  TECHNOLOGY
+  VEHICLE
+  FOOD
+  ANIMAL
+  ARCHITECTURE
+  OTHER
+}
+
+model Work {
+  id            Int          @id @default(autoincrement())
+  userId        String       @map("user_id")
+  imageUrl      String       @map("image_url")
+  name          String       @db.VarChar(100)
+  category      WorkCategory @default(OTHER)
+  partCount     Int?         @map("part_count")
+  description   String
+  tags          String[]
+  generate3d    Boolean      @default(false) @map("generate_3d")
+  isPublic      Boolean      @default(true) @map("is_public")
+  joinContest   Boolean      @default(false) @map("join_contest")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  user          User         @relation(fields: [userId], references: [id])
+
+  @@map("works")
+  @@index([userId])
+  @@index([createdAt(sort: Desc)])
 }
 
 model ModelType {

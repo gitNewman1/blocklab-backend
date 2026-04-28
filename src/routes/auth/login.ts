@@ -22,8 +22,15 @@ export async function authRoutes(app: FastifyInstance) {
             description: '登录成功',
             type: 'object',
             properties: {
-              userId: { type: 'string' },
-              isNewUser: { type: 'boolean' }
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              data: {
+                type: 'object',
+                properties: {
+                  userId: { type: 'string' },
+                  isNewUser: { type: 'boolean' }
+                }
+              }
             }
           }
         }
@@ -39,11 +46,11 @@ export async function authRoutes(app: FastifyInstance) {
     const existing = await prisma.user.findUnique({ where: { unionId } });
 
     if (existing) {
-      return { userId: existing.id, isNewUser: false };
+      return { success: true, message: 'Login successful', data: { userId: existing.id, isNewUser: false } };
     }
 
     const user = await prisma.user.create({ data: { unionId } });
-    return { userId: user.id, isNewUser: true };
+    return { success: true, message: 'User created', data: { userId: user.id, isNewUser: true } };
     }
   );
 
