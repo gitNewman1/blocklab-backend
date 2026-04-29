@@ -5,217 +5,207 @@ const prisma = new PrismaClient();
 
 const VALID_CATEGORIES = ['TECHNOLOGY', 'VEHICLE', 'FOOD', 'ANIMAL', 'ARCHITECTURE', 'OTHER'];
 
+const workFields = {
+  id: true, userId: true, imageUrl: true, name: true,
+  category: true, partCount: true, tags: true,
+  isPublic: true, joinContest: true, createdAt: true,
+  _count: { select: { likes: true } }
+};
+
+async function withLiked(works: any[], userId?: string) {
+  if (!userId) return works.map(w => ({ ...w, likeCount: w._count.likes, liked: false, _count: undefined }));
+  const likedIds = new Set(
+    (await prisma.workLike.findMany({ where: { userId, workId: { in: works.map(w => w.id) } }, select: { workId: true } }))
+      .map(l => l.workId)
+  );
+  return works.map(w => ({ ...w, likeCount: w._count.likes, liked: likedIds.has(w.id), _count: undefined }));
+}
+
 export async function workRoutes(app: FastifyInstance) {
-  app.post(
-    '/',
-    {
-      schema: {
-        tags: ['Works'],
-        summary: '发布作品',
-        body: {
-          type: 'object',
-          required: ['userId', 'imageUrl', 'name', 'description'],
-          properties: {
-            userId:      { type: 'string' },
-            imageUrl:    { type: 'string' },
-            name:        { type: 'string', maxLength: 100 },
-            category:    { type: 'string', enum: VALID_CATEGORIES, default: 'OTHER' },
-            partCount:   { type: 'integer', minimum: 0 },
-            description: { type: 'string' },
-            tags:        { type: 'array', items: { type: 'string' }, default: [] },
-            generate3d:  { type: 'boolean', default: false },
-            isPublic:    { type: 'boolean', default: true },
-            joinContest: { type: 'boolean', default: false }
-          }
+  // 发布作品
+  app.post('/', {
+    schema: {
+      tags: ['Works'], summary: '发布作品',
+      body: {
+        type: 'object',
+        required: ['userId', 'imageUrl', 'name', 'description'],
+        properties: {
+          userId:      { type: 'string' },
+          imageUrl:    { type: 'string' },
+          name:        { type: 'string', maxLength: 100 },
+          category:    { type: 'string', enum: VALID_CATEGORIES, default: 'OTHER' },
+          partCount:   { type: 'integer', minimum: 0 },
+          description: { type: 'string' },
+          tags:        { type: 'array', items: { type: 'string' }, default: [] },
+          generate3d:  { type: 'boolean', default: false },
+          isPublic:    { type: 'boolean', default: true },
+          joinContest: { type: 'boolean', default: false }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const body = request.body as any;
+      const user = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } });
+      if (!user) return reply.code(400).send({ success: false, message: 'User not found', error: 'INVALID_USER_ID' });
+      const work = await prisma.work.create({ data: {
+        userId: body.userId, imageUrl: body.imageUrl, name: body.name,
+        category: body.category ?? 'OTHER', partCount: body.partCount ?? null,
+        description: body.description, tags: body.tags ?? [],
+        generate3d: body.generate3d ?? false, isPublic: body.isPublic ?? true, joinContest: body.joinContest ?? false
+      }});
+      return reply.code(201).send({ success: true, message: 'Work published successfully', data: work });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
+
+  // 获取作品列表（含点赞数和是否已点赞）
+  app.get('/', {
+    schema: {
+      tags: ['Works'], summary: '获取作品列表',
+      querystring: {
+        type: 'object',
+        properties: {
+          userId:   { type: 'string', description: '当前用户 ID，用于判断是否已点赞' },
+          filterUserId: { type: 'string', description: '按作者 ID 过滤' },
+          category: { type: 'string', enum: VALID_CATEGORIES }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { userId, filterUserId, category } = request.query as any;
+      const works = await prisma.work.findMany({
+        where: {
+          ...(filterUserId ? { userId: filterUserId } : {}),
+          ...(category ? { category } : {})
         },
-        response: {
-          201: {
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              message: { type: 'string' },
-              data: {
-                type: 'object',
-                properties: {
-                  id:          { type: 'integer' },
-                  userId:      { type: 'string' },
-                  imageUrl:    { type: 'string' },
-                  name:        { type: 'string' },
-                  category:    { type: 'string' },
-                  partCount:   { type: ['integer', 'null'] },
-                  description: { type: 'string' },
-                  tags:        { type: 'array', items: { type: 'string' } },
-                  generate3d:  { type: 'boolean' },
-                  isPublic:    { type: 'boolean' },
-                  joinContest: { type: 'boolean' },
-                  createdAt:   { type: 'string', format: 'date-time' }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    async (request, reply) => {
-      try {
-        const body = request.body as {
-          userId: string;
-          imageUrl: string;
-          name: string;
-          category?: string;
-          partCount?: number;
-          description: string;
-          tags?: string[];
-          generate3d?: boolean;
-          isPublic?: boolean;
-          joinContest?: boolean;
-        };
+        orderBy: { createdAt: 'desc' },
+        select: workFields
+      });
+      return reply.send({ success: true, message: 'Works fetched successfully', data: await withLiked(works, userId) });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
 
-        const user = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } });
-        if (!user) {
-          return reply.code(400).send({ success: false, message: 'User not found', error: 'INVALID_USER_ID' });
-        }
-
-        const work = await prisma.work.create({
-          data: {
-            userId:      body.userId,
-            imageUrl:    body.imageUrl,
-            name:        body.name,
-            category:    (body.category as any) ?? 'OTHER',
-            partCount:   body.partCount ?? null,
-            description: body.description,
-            tags:        body.tags ?? [],
-            generate3d:  body.generate3d ?? false,
-            isPublic:    body.isPublic ?? true,
-            joinContest: body.joinContest ?? false
-          }
-        });
-
-        return reply.code(201).send({ success: true, message: 'Work published successfully', data: work });
-      } catch (error: any) {
-        request.log.error({ error: error.message }, 'Publish work failed');
-        return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+  // 我的点赞列表
+  app.get('/likes/mine', {
+    schema: {
+      tags: ['Works'], summary: '我点赞的作品列表',
+      querystring: {
+        type: 'object', required: ['userId'],
+        properties: { userId: { type: 'string' } }
       }
     }
-  );
-
-  const workListItem = {
-    type: 'object',
-    properties: {
-      id:          { type: 'integer' },
-      userId:      { type: 'string' },
-      imageUrl:    { type: 'string' },
-      name:        { type: 'string' },
-      category:    { type: 'string' },
-      partCount:   { type: ['integer', 'null'] },
-      tags:        { type: 'array', items: { type: 'string' } },
-      isPublic:    { type: 'boolean' },
-      joinContest: { type: 'boolean' },
-      createdAt:   { type: 'string', format: 'date-time' }
-    }
-  };
-
-  app.get(
-    '/',
-    {
-      schema: {
-        tags: ['Works'],
-        summary: '获取作品列表',
-        querystring: {
-          type: 'object',
-          properties: {
-            userId:   { type: 'string', description: '按用户 ID 过滤' },
-            category: { type: 'string', enum: VALID_CATEGORIES, description: '按分类过滤' }
-          }
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              message: { type: 'string' },
-              data: { type: 'array', items: workListItem }
-            }
-          }
+  }, async (request, reply) => {
+    try {
+      const { userId } = request.query as { userId: string };
+      const likes = await prisma.workLike.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          createdAt: true,
+          work: { select: { id: true, name: true, imageUrl: true, category: true, _count: { select: { likes: true } } } }
         }
-      }
-    },
-    async (request, reply) => {
-      try {
-        const { userId, category } = request.query as { userId?: string; category?: string };
-        const works = await prisma.work.findMany({
-          where: {
-            ...(userId ? { userId } : {}),
-            ...(category ? { category: category as any } : {})
-          },
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true, userId: true, imageUrl: true, name: true,
-            category: true, partCount: true, tags: true,
-            isPublic: true, joinContest: true, createdAt: true
-          }
-        });
-        return reply.send({ success: true, message: 'Works fetched successfully', data: works });
-      } catch (error: any) {
-        return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+      });
+      return reply.send({
+        success: true, message: 'Liked works fetched successfully',
+        data: likes.map(l => ({ ...l.work, likeCount: l.work._count.likes, liked: true, _count: undefined, likedAt: l.createdAt }))
+      });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
+
+  // 收到的点赞消息列表
+  app.get('/likes/received', {
+    schema: {
+      tags: ['Works'], summary: '收到的点赞消息列表',
+      querystring: {
+        type: 'object', required: ['userId'],
+        properties: { userId: { type: 'string' } }
       }
     }
-  );
-
-  app.get(
-    '/:id',
-    {
-      schema: {
-        tags: ['Works'],
-        summary: '获取作品详情',
-        params: {
-          type: 'object',
-          required: ['id'],
-          properties: { id: { type: 'integer', minimum: 1 } }
-        },
-        response: {
-          200: {
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              message: { type: 'string' },
-              data: {
-                type: 'object',
-                properties: {
-                  id:          { type: 'integer' },
-                  userId:      { type: 'string' },
-                  imageUrl:    { type: 'string' },
-                  name:        { type: 'string' },
-                  category:    { type: 'string' },
-                  partCount:   { type: ['integer', 'null'] },
-                  description: { type: 'string' },
-                  tags:        { type: 'array', items: { type: 'string' } },
-                  generate3d:  { type: 'boolean' },
-                  isPublic:    { type: 'boolean' },
-                  joinContest: { type: 'boolean' },
-                  createdAt:   { type: 'string', format: 'date-time' }
-                }
-              }
-            }
-          }
+  }, async (request, reply) => {
+    try {
+      const { userId } = request.query as { userId: string };
+      const likes = await prisma.workLike.findMany({
+        where: { work: { userId } },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          createdAt: true,
+          userId: true,
+          work: { select: { id: true, name: true } }
         }
-      }
-    },
-    async (request, reply) => {
-      try {
-        const { id } = request.params as { id: string };
-        const workId = Number(id);
-        if (!Number.isInteger(workId) || workId <= 0) {
-          return reply.code(400).send({ success: false, message: 'id must be a positive integer', error: 'INVALID_ID' });
-        }
-        const work = await prisma.work.findUnique({ where: { id: workId } });
-        if (!work) {
-          return reply.code(404).send({ success: false, message: 'Work not found', error: 'WORK_NOT_FOUND' });
-        }
-        return reply.send({ success: true, message: 'Work fetched successfully', data: work });
-      } catch (error: any) {
-        return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
-      }
+      });
+      return reply.send({
+        success: true, message: 'Received likes fetched successfully',
+        data: likes.map(l => ({ workId: l.work.id, workName: l.work.name, likerUserId: l.userId, likedAt: l.createdAt }))
+      });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }
-  );
+  });
+
+  // 点赞 / 取消点赞
+  app.post('/:id/like', {
+    schema: {
+      tags: ['Works'], summary: '点赞或取消点赞作品',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } },
+      body: { type: 'object', required: ['userId'], properties: { userId: { type: 'string' } } }
+    }
+  }, async (request, reply) => {
+    try {
+      const workId = Number((request.params as any).id);
+      const { userId } = request.body as { userId: string };
+
+      const work = await prisma.work.findUnique({ where: { id: workId }, select: { id: true } });
+      if (!work) return reply.code(404).send({ success: false, message: 'Work not found', error: 'WORK_NOT_FOUND' });
+
+      const existing = await prisma.workLike.findUnique({ where: { userId_workId: { userId, workId } } });
+      if (existing) {
+        await prisma.workLike.delete({ where: { userId_workId: { userId, workId } } });
+      } else {
+        await prisma.workLike.create({ data: { userId, workId } });
+      }
+
+      const likeCount = await prisma.workLike.count({ where: { workId } });
+      return reply.send({ success: true, message: existing ? 'Unliked' : 'Liked', data: { liked: !existing, likeCount } });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
+
+  // 获取作品详情（含点赞数和是否已点赞）
+  app.get('/:id', {
+    schema: {
+      tags: ['Works'], summary: '获取作品详情',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } },
+      querystring: { type: 'object', properties: { userId: { type: 'string', description: '当前用户 ID' } } }
+    }
+  }, async (request, reply) => {
+    try {
+      const workId = Number((request.params as any).id);
+      const { userId } = request.query as { userId?: string };
+      if (!Number.isInteger(workId) || workId <= 0) {
+        return reply.code(400).send({ success: false, message: 'id must be a positive integer', error: 'INVALID_ID' });
+      }
+      const work = await prisma.work.findUnique({
+        where: { id: workId },
+        select: { ...workFields, description: true, generate3d: true }
+      });
+      if (!work) return reply.code(404).send({ success: false, message: 'Work not found', error: 'WORK_NOT_FOUND' });
+
+      const liked = userId
+        ? !!(await prisma.workLike.findUnique({ where: { userId_workId: { userId, workId } } }))
+        : false;
+
+      const { _count, ...rest } = work as any;
+      return reply.send({ success: true, message: 'Work fetched successfully', data: { ...rest, likeCount: _count.likes, liked } });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
 }

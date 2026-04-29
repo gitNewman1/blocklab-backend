@@ -27,10 +27,11 @@ model Model {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  unionId   String   @unique @map("union_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  works     Work[]
+  id          String     @id @default(uuid())
+  unionId     String     @unique @map("union_id")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  works       Work[]
+  likesGiven  WorkLike[]
 
   @@map("users")
 }
@@ -58,8 +59,24 @@ model Work {
   joinContest   Boolean      @default(false) @map("join_contest")
   createdAt     DateTime     @default(now()) @map("created_at")
   user          User         @relation(fields: [userId], references: [id])
+  likes         WorkLike[]
 
   @@map("works")
+  @@index([userId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model WorkLike {
+  id        Int      @id @default(autoincrement())
+  userId    String   @map("user_id")
+  workId    Int      @map("work_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id])
+  work      Work     @relation(fields: [workId], references: [id])
+
+  @@unique([userId, workId])
+  @@map("work_likes")
+  @@index([workId])
   @@index([userId])
   @@index([createdAt(sort: Desc)])
 }
