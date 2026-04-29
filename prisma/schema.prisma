@@ -29,6 +29,8 @@ model Model {
 model User {
   id          String     @id @default(uuid())
   unionId     String     @unique @map("union_id")
+  nickname    String?    @db.VarChar(100)
+  scanCount   Int        @default(0) @map("scan_count")
   createdAt   DateTime   @default(now()) @map("created_at")
   works       Work[]
   likesGiven  WorkLike[]

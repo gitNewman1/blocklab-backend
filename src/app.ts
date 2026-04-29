@@ -10,6 +10,7 @@ import { recognitionImageMatchRoutes } from './routes/recognition/image-match';
 import { modelQueryRoutes } from './routes/models';
 import { authRoutes } from './routes/auth/login';
 import { workRoutes } from './routes/works';
+import { userRoutes } from './routes/users';
 import { modelTypeRoutes } from './routes/model-types';
 import { registerSwagger } from './plugins/swagger';
 import { config } from './config';
@@ -41,6 +42,7 @@ export async function buildApp() {
   await app.register(modelTypeRoutes, { prefix: '/api/model-types' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(workRoutes, { prefix: '/api/works' });
+  await app.register(userRoutes, { prefix: '/api/users' });
 
   return app;
 }

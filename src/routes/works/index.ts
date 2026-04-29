@@ -7,7 +7,7 @@ const VALID_CATEGORIES = ['TECHNOLOGY', 'VEHICLE', 'FOOD', 'ANIMAL', 'ARCHITECTU
 
 const workFields = {
   id: true, userId: true, imageUrl: true, name: true,
-  category: true, partCount: true, tags: true,
+  category: true, partCount: true, description: true, tags: true,
   isPublic: true, joinContest: true, createdAt: true,
   _count: { select: { likes: true } }
 };
@@ -137,12 +137,13 @@ export async function workRoutes(app: FastifyInstance) {
         select: {
           createdAt: true,
           userId: true,
+          user: { select: { nickname: true } },
           work: { select: { id: true, name: true } }
         }
       });
       return reply.send({
         success: true, message: 'Received likes fetched successfully',
-        data: likes.map(l => ({ workId: l.work.id, workName: l.work.name, likerUserId: l.userId, likedAt: l.createdAt }))
+        data: likes.map(l => ({ workId: l.work.id, workName: l.work.name, likerUserId: l.userId, likerNickname: l.user.nickname, likedAt: l.createdAt }))
       });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });

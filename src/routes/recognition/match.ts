@@ -50,7 +50,8 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
                   quantity: { type: 'integer', minimum: 1 }
                 }
               }
-            }
+            },
+            userId: { type: 'string' }
           }
         },
         response: {
@@ -83,7 +84,8 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
     try {
-      const inputParts = parseInputParts((request.body as { parts?: unknown })?.parts);
+      const body = request.body as { parts?: unknown; userId?: string };
+      const inputParts = parseInputParts(body?.parts);
       if (inputParts.length === 0) {
         return reply.code(400).send({
           success: false,
@@ -148,6 +150,9 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
           },
           'Finished recognition match'
         );
+        if (body.userId) {
+          await prisma.user.updateMany({ where: { id: body.userId }, data: { scanCount: { increment: 1 } } });
+        }
         return reply.send({
           success: true,
           message: 'Recognition matching completed',
@@ -186,6 +191,9 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
         'Finished recognition match'
       );
 
+      if (body.userId) {
+        await prisma.user.updateMany({ where: { id: body.userId }, data: { scanCount: { increment: 1 } } });
+      }
       return reply.send({
         success: true,
         message: 'Recognition matching completed',
