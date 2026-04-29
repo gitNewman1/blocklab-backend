@@ -159,6 +159,60 @@ export async function workRoutes(app: FastifyInstance) {
     }
   });
 
+  // 我的作品发布消息列表（含3D任务状态）
+  app.get('/messages/publish', {
+    schema: {
+      tags: ['Works'], summary: '我的作品发布消息列表',
+      querystring: {
+        type: 'object', required: ['userId'],
+        properties: { userId: { type: 'string' } }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { userId } = request.query as { userId: string };
+      const works = await prisma.work.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, name: true, imageUrl: true, createdAt: true,
+          generate3d: true, hunyuan3dTaskId: true, hunyuan3dStatus: true, model3dUrl: true
+        }
+      });
+
+      // 对 processing 状态的任务，主动查询一次混元最新状态
+      await Promise.all(
+        works
+          .filter(w => w.hunyuan3dTaskId && w.hunyuan3dStatus === 'processing')
+          .map(async w => {
+            try {
+              const result = await hunyuan3d.queryJob(w.hunyuan3dTaskId!);
+              if (result.status === 'DONE') {
+                await prisma.work.update({ where: { id: w.id }, data: { hunyuan3dStatus: 'done', model3dUrl: result.modelUrl } });
+                w.hunyuan3dStatus = 'done';
+                w.model3dUrl = result.modelUrl ?? null;
+              } else if (result.status === 'FAIL') {
+                await prisma.work.update({ where: { id: w.id }, data: { hunyuan3dStatus: 'failed' } });
+                w.hunyuan3dStatus = 'failed';
+              }
+            } catch {}
+          })
+      );
+
+      return reply.send({
+        success: true, message: 'Publish messages fetched successfully',
+        data: works.map(w => ({
+          workId: w.id, name: w.name, imageUrl: w.imageUrl, publishedAt: w.createdAt,
+          generate3d: w.generate3d,
+          hunyuan3dStatus: w.hunyuan3dStatus,
+          model3dUrl: w.model3dUrl
+        }))
+      });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
+
   // 查询3D生成状态
   app.get('/:id/3d-status', {
     schema: {
