@@ -30,5 +30,10 @@ export const config = {
     apiKey: process.env.ROBOFLOW_API_KEY || '',
     workflowUrl: process.env.ROBOFLOW_WORKFLOW_URL || '',
     timeoutMs: Number.isFinite(parsedRoboflowTimeoutMs) ? parsedRoboflowTimeoutMs : 15000
+  },
+  hunyuan3d: {
+    secretId: process.env.HUNYUAN3D_SECRET_ID || '',
+    secretKey: process.env.HUNYUAN3D_SECRET_KEY || '',
+    region: process.env.HUNYUAN3D_REGION || 'ap-guangzhou'
   }
 };

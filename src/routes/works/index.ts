@@ -1,7 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
+import { Hunyuan3dService } from '../../services/hunyuan3d.service';
 
 const prisma = new PrismaClient();
+const hunyuan3d = new Hunyuan3dService();
 
 const VALID_CATEGORIES = ['TECHNOLOGY', 'VEHICLE', 'FOOD', 'ANIMAL', 'ARCHITECTURE', 'OTHER'];
 
@@ -52,8 +54,16 @@ export async function workRoutes(app: FastifyInstance) {
         userId: body.userId, imageUrl: body.imageUrl, name: body.name,
         category: body.category ?? 'OTHER', partCount: body.partCount ?? null,
         description: body.description, tags: body.tags ?? [],
-        generate3d: body.generate3d ?? false, isPublic: body.isPublic ?? true, joinContest: body.joinContest ?? false
+        generate3d: body.generate3d ?? false, isPublic: body.isPublic ?? true, joinContest: body.joinContest ?? false,
+        hunyuan3dStatus: body.generate3d ? 'pending' : null
       }});
+
+      if (body.generate3d) {
+        hunyuan3d.submitJob(body.imageUrl)
+          .then(jobId => prisma.work.update({ where: { id: work.id }, data: { hunyuan3dTaskId: jobId, hunyuan3dStatus: 'processing' } }))
+          .catch(() => prisma.work.update({ where: { id: work.id }, data: { hunyuan3dStatus: 'failed' } }));
+      }
+
       return reply.code(201).send({ success: true, message: 'Work published successfully', data: work });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
@@ -145,6 +155,93 @@ export async function workRoutes(app: FastifyInstance) {
         success: true, message: 'Received likes fetched successfully',
         data: likes.map(l => ({ workId: l.work.id, workName: l.work.name, likerUserId: l.userId, likerNickname: l.user.nickname, likedAt: l.createdAt }))
       });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
+
+  // 我的作品发布消息列表（含3D任务状态）
+  app.get('/messages/publish', {
+    schema: {
+      tags: ['Works'], summary: '我的作品发布消息列表',
+      querystring: {
+        type: 'object', required: ['userId'],
+        properties: { userId: { type: 'string' } }
+      }
+    }
+  }, async (request, reply) => {
+    try {
+      const { userId } = request.query as { userId: string };
+      const works = await prisma.work.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, name: true, imageUrl: true, createdAt: true,
+          generate3d: true, hunyuan3dTaskId: true, hunyuan3dStatus: true, model3dUrl: true
+        }
+      });
+
+      // 对 processing 状态的任务，主动查询一次混元最新状态
+      await Promise.all(
+        works
+          .filter(w => w.hunyuan3dTaskId && w.hunyuan3dStatus === 'processing')
+          .map(async w => {
+            try {
+              const result = await hunyuan3d.queryJob(w.hunyuan3dTaskId!);
+              if (result.status === 'DONE') {
+                await prisma.work.update({ where: { id: w.id }, data: { hunyuan3dStatus: 'done', model3dUrl: result.modelUrl } });
+                w.hunyuan3dStatus = 'done';
+                w.model3dUrl = result.modelUrl ?? null;
+              } else if (result.status === 'FAIL') {
+                await prisma.work.update({ where: { id: w.id }, data: { hunyuan3dStatus: 'failed' } });
+                w.hunyuan3dStatus = 'failed';
+              }
+            } catch {}
+          })
+      );
+
+      return reply.send({
+        success: true, message: 'Publish messages fetched successfully',
+        data: works.map(w => ({
+          workId: w.id, name: w.name, imageUrl: w.imageUrl, publishedAt: w.createdAt,
+          generate3d: w.generate3d,
+          hunyuan3dStatus: w.hunyuan3dStatus,
+          model3dUrl: w.model3dUrl
+        }))
+      });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
+
+  // 查询3D生成状态
+  app.get('/:id/3d-status', {
+    schema: {
+      tags: ['Works'], summary: '查询作品3D生成状态',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } }
+    }
+  }, async (request, reply) => {
+    try {
+      const workId = Number((request.params as any).id);
+      const work = await prisma.work.findUnique({
+        where: { id: workId },
+        select: { id: true, hunyuan3dTaskId: true, hunyuan3dStatus: true, model3dUrl: true }
+      });
+      if (!work) return reply.code(404).send({ success: false, message: 'Work not found', error: 'WORK_NOT_FOUND' });
+      if (!work.hunyuan3dTaskId || work.hunyuan3dStatus === 'done' || work.hunyuan3dStatus === 'failed') {
+        return reply.send({ success: true, data: { status: work.hunyuan3dStatus, model3dUrl: work.model3dUrl } });
+      }
+      // 向混元查询最新状态
+      const result = await hunyuan3d.queryJob(work.hunyuan3dTaskId);
+      if (result.status === 'DONE') {
+        await prisma.work.update({ where: { id: workId }, data: { hunyuan3dStatus: 'done', model3dUrl: result.modelUrl } });
+        return reply.send({ success: true, data: { status: 'done', model3dUrl: result.modelUrl } });
+      }
+      if (result.status === 'FAIL') {
+        await prisma.work.update({ where: { id: workId }, data: { hunyuan3dStatus: 'failed' } });
+        return reply.send({ success: true, data: { status: 'failed', model3dUrl: null } });
+      }
+      return reply.send({ success: true, data: { status: 'processing', model3dUrl: null } });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }
