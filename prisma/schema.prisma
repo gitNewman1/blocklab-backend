@@ -55,6 +55,9 @@ model Work {
   description   String
   tags          String[]
   generate3d    Boolean      @default(false) @map("generate_3d")
+  hunyuan3dTaskId String?    @map("hunyuan3d_task_id")
+  hunyuan3dStatus String?    @map("hunyuan3d_status")
+  model3dUrl      String?    @map("model_3d_url")
   isPublic      Boolean      @default(true) @map("is_public")
   joinContest   Boolean      @default(false) @map("join_contest")
   createdAt     DateTime     @default(now()) @map("created_at")
