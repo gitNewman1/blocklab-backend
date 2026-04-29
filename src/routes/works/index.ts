@@ -147,13 +147,13 @@ export async function workRoutes(app: FastifyInstance) {
         select: {
           createdAt: true,
           userId: true,
-          user: { select: { nickname: true } },
+          user: { select: { nickname: true, unionId: true } },
           work: { select: { id: true, name: true } }
         }
       });
       return reply.send({
         success: true, message: 'Received likes fetched successfully',
-        data: likes.map(l => ({ workId: l.work.id, workName: l.work.name, likerUserId: l.userId, likerNickname: l.user.nickname, likedAt: l.createdAt }))
+        data: likes.map(l => ({ workId: l.work.id, workName: l.work.name, likerUserId: l.userId, likerNickname: l.user.nickname ?? `积木${l.user.unionId.slice(0, 6)}`, likedAt: l.createdAt }))
       });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
