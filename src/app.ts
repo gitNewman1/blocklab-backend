@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
+import staticFiles from '@fastify/static';
+import path from 'path';
 import { modelsRoutes } from './routes/admin/models';
 import { recommendedModelsRoutes } from './routes/admin/recommended-models';
 import { dataManagementRoutes } from './routes/admin/data-management';
@@ -21,6 +23,10 @@ export async function buildApp() {
   });
 
   await app.register(cors);
+  await app.register(staticFiles, {
+    root: path.join(__dirname, '..', 'public'),
+    prefix: '/'
+  });
   await app.register(multipart, {
     limits: {
       fileSize: config.storage.maxFileSizeMb * 1024 * 1024

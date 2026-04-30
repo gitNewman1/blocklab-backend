@@ -93,4 +93,14 @@ export async function adminModelTypeRoutes(app: FastifyInstance) {
     }
     }
   );
+
+  app.delete('/:id', async (request, reply) => {
+    try {
+      const id = Number((request.params as any).id);
+      await prisma.modelType.delete({ where: { id } });
+      return reply.send({ success: true, message: 'Model type deleted' });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
 }

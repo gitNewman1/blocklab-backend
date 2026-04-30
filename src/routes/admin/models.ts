@@ -241,6 +241,18 @@ export async function modelsRoutes(app: FastifyInstance) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }
   });
+
+  app.delete('/:id', async (request, reply) => {
+    try {
+      const id = Number((request.params as any).id);
+      const model = await prisma.model.findUnique({ where: { id }, select: { ioFileUrl: true, model3dUrl: true, thumbnailUrl: true, manualUrl: true } });
+      if (!model) return reply.code(404).send({ success: false, message: 'Model not found', error: 'MODEL_NOT_FOUND' });
+      await prisma.model.delete({ where: { id } });
+      return reply.send({ success: true, message: 'Model deleted' });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
 }
 
 function hasFileExtension(filename: string, ext: string): boolean {

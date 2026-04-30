@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlockLab 管理后台</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f7fa; }
+    .container { display: flex; height: 100vh; }
+    .sidebar { width: 240px; background: #2c3e50; color: white; padding: 20px 0; }
+    .sidebar h1 { padding: 0 20px 30px; font-size: 20px; border-bottom: 1px solid #34495e; }
+    .nav-item { padding: 12px 20px; cursor: pointer; transition: background 0.2s; }
+    .nav-item:hover { background: #34495e; }
+    .nav-item.active { background: #3498db; }
+    .main { flex: 1; padding: 30px; overflow-y: auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+    .header h2 { font-size: 24px; color: #2c3e50; }
+    .btn { padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+    .btn-primary { background: #3498db; color: white; }
+    .btn-primary:hover { background: #2980b9; }
+    .btn-success { background: #27ae60; color: white; }
+    .btn-success:hover { background: #229954; }
+    .btn-danger { background: #e74c3c; color: white; }
+    .btn-danger:hover { background: #c0392b; }
+    .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .table { width: 100%; border-collapse: collapse; }
+    .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #ecf0f1; }
+    .table th { background: #f8f9fa; font-weight: 600; color: #2c3e50; }
+    .table tr:hover { background: #f8f9fa; }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
+    .modal.show { display: flex; align-items: center; justify-content: center; }
+    .modal-content { background: white; border-radius: 8px; padding: 30px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: #2c3e50; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    .form-group textarea { min-height: 100px; resize: vertical; }
+    .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .loading { text-align: center; padding: 40px; color: #7f8c8d; }
+    .empty { text-align: center; padding: 40px; color: #95a5a6; }
+    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+    .badge-success { background: #d4edda; color: #155724; }
+    .badge-warning { background: #fff3cd; color: #856404; }
+    .badge-danger { background: #f8d7da; color: #721c24; }
+    .img-preview { max-width: 100px; max-height: 100px; object-fit: cover; border-radius: 4px; }
+    .section { display: none; }
+    .section.active { display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="sidebar">
+      <h1>BlockLab 管理</h1>
+      <div class="nav-item active" data-section="models">模型管理</div>
+      <div class="nav-item" data-section="model-types">模型分类</div>
+      <div class="nav-item" data-section="recommended">推荐商品</div>
+      <div class="nav-item" data-section="works">作品管理</div>
+      <div class="nav-item" data-section="users">用户管理</div>
+    </div>
+    <div class="main">
+      <div id="models-section" class="section active">
+        <div class="header">
+          <h2>模型管理</h2>
+          <button class="btn btn-primary" onclick="showAddModel()">+ 添加模型</button>
+        </div>
+        <div class="card">
+          <div id="models-list" class="loading">加载中...</div>
+        </div>
+      </div>
+      <div id="model-types-section" class="section">
+        <div class="header">
+          <h2>模型分类</h2>
+          <button class="btn btn-primary" onclick="showAddModelType()">+ 添加分类</button>
+        </div>
+        <div class="card">
+          <div id="model-types-list" class="loading">加载中...</div>
+        </div>
+      </div>
+      <div id="recommended-section" class="section">
+        <div class="header">
+          <h2>推荐商品</h2>
+          <button class="btn btn-primary" onclick="showAddRecommended()">+ 添加商品</button>
+        </div>
+        <div class="card">
+          <div id="recommended-list" class="loading">加载中...</div>
+        </div>
+      </div>
+      <div id="works-section" class="section">
+        <div class="header">
+          <h2>作品管理</h2>
+        </div>
+        <div class="card">
+          <div id="works-list" class="loading">加载中...</div>
+        </div>
+      </div>
+      <div id="users-section" class="section">
+        <div class="header">
+          <h2>用户管理</h2>
+        </div>
+        <div class="card">
+          <div id="users-list" class="loading">加载中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 添加/编辑模型分类 -->
+  <div id="model-type-modal" class="modal">
+    <div class="modal-content">
+      <h3 id="model-type-modal-title">添加模型分类</h3>
+      <div class="form-group">
+        <label>分类名称 *</label>
+        <input type="text" id="model-type-name" placeholder="输入分类名称">
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('model-type-modal')">取消</button>
+        <button class="btn btn-primary" onclick="submitModelType()">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 添加推荐商品 -->
+  <div id="recommended-modal" class="modal">
+    <div class="modal-content">
+      <h3>添加推荐商品</h3>
+      <div class="form-group">
+        <label>套装编号 *</label>
+        <input type="text" id="rec-set-number" placeholder="如: 42154">
+      </div>
+      <div class="form-group">
+        <label>名称 *</label>
+        <input type="text" id="rec-name" placeholder="商品名称">
+      </div>
+      <div class="form-group">
+        <label>系列</label>
+        <input type="text" id="rec-series" placeholder="如: Technic">
+      </div>
+      <div class="form-group">
+        <label>零件数量 *</label>
+        <input type="number" id="rec-part-count" placeholder="零件数量" min="1">
+      </div>
+      <div class="form-group">
+        <label>价格 *</label>
+        <input type="number" id="rec-price" placeholder="价格" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>适龄</label>
+        <input type="text" id="rec-age-rating" placeholder="如: 10+">
+      </div>
+      <div class="form-group">
+        <label>封面图 *</label>
+        <input type="file" id="rec-cover" accept="image/*">
+      </div>
+      <div class="form-group">
+        <label>展示图 *</label>
+        <input type="file" id="rec-display" accept="image/*">
+      </div>
+      <div class="form-group">
+        <label>详情图（可多选）</label>
+        <input type="file" id="rec-details" accept="image/*" multiple>
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('recommended-modal')">取消</button>
+        <button class="btn btn-primary" onclick="submitRecommended()">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 上传模型 -->
+  <div id="model-modal" class="modal">
+    <div class="modal-content">
+      <h3>上传模型</h3>
+      <div class="form-group">
+        <label>模型名称 *</label>
+        <input type="text" id="model-name" placeholder="模型名称">
+      </div>
+      <div class="form-group">
+        <label>模型分类 *</label>
+        <select id="model-type-select">
+          <option value="">选择分类...</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>IO 文件 (.io) *</label>
+        <input type="file" id="model-io" accept=".io">
+      </div>
+      <div class="form-group">
+        <label>3D 模型文件 (.glb) *</label>
+        <input type="file" id="model-glb" accept=".glb">
+      </div>
+      <div class="form-group">
+        <label>说明书 (.pdf)</label>
+        <input type="file" id="model-manual" accept=".pdf">
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('model-modal')">取消</button>
+        <button class="btn btn-primary" onclick="submitModel()">上传</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+
+    // Navigation
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        item.classList.add('active');
+        const section = item.dataset.section;
+        document.getElementById(section + '-section').classList.add('active');
+        loadSection(section);
+      });
+    });
+
+    function loadSection(section) {
+      if (section === 'models') loadModels();
+      else if (section === 'model-types') loadModelTypes();
+      else if (section === 'recommended') loadRecommended();
+      else if (section === 'works') loadWorks();
+      else if (section === 'users') loadUsers();
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('show');
+    }
+
+    // ---- Model Types ----
+    async function loadModelTypes() {
+      const el = document.getElementById('model-types-list');
+      el.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const res = await fetch(API + '/api/model-types');
+        const json = await res.json();
+        const types = json.data || [];
+        if (!types.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+        el.innerHTML = `<table class="table">
+          <thead><tr><th>ID</th><th>名称</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody>${types.map(t => `<tr>
+            <td>${t.id}</td><td>${t.name}</td>
+            <td>${new Date(t.createdAt).toLocaleString()}</td>
+            <td><button class="btn btn-danger" onclick="deleteModelType(${t.id})">删除</button></td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+    }
+
+    function showAddModelType() {
+      document.getElementById('model-type-name').value = '';
+      document.getElementById('model-type-modal').classList.add('show');
+    }
+
+    async function submitModelType() {
+      const name = document.getElementById('model-type-name').value.trim();
+      if (!name) return alert('请输入分类名称');
+      try {
+        const res = await fetch(API + '/api/admin/model-types/create', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const json = await res.json();
+        if (!json.success) return alert(json.message || '创建失败');
+        closeModal('model-type-modal');
+        loadModelTypes();
+      } catch(e) { alert('请求失败'); }
+    }
+
+    async function deleteModelType(id) {
+      if (!confirm('确认删除该分类？')) return;
+      await fetch(API + '/api/admin/model-types/' + id, { method: 'DELETE' });
+      loadModelTypes();
+    }
+
+    // ---- Models ----
+    async function loadModels() {
+      const el = document.getElementById('models-list');
+      el.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const res = await fetch(API + '/api/models');
+        const json = await res.json();
+        const models = json.data || [];
+        if (!models.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+        el.innerHTML = `<table class="table">
+          <thead><tr><th>ID</th><th>缩略图</th><th>名称</th><th>零件数</th><th>分类</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody>${models.map(m => `<tr>
+            <td>${m.id}</td>
+            <td>${m.thumbnailUrl ? `<img src="${m.thumbnailUrl}" class="img-preview">` : '-'}</td>
+            <td>${m.name}</td>
+            <td>${m.partCount}</td>
+            <td>${m.modelTypeName || '-'}</td>
+            <td>${new Date(m.createdAt).toLocaleString()}</td>
+            <td><button class="btn btn-danger" onclick="deleteModel(${m.id})">删除</button></td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+    }
+
+    async function showAddModel() {
+      const res = await fetch(API + '/api/model-types');
+      const json = await res.json();
+      const sel = document.getElementById('model-type-select');
+      sel.innerHTML = '<option value="">选择分类...</option>' +
+        (json.data || []).map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+      ['model-name','model-io','model-glb','model-manual'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el.type === 'file') el.value = ''; else el.value = '';
+      });
+      document.getElementById('model-modal').classList.add('show');
+    }
+
+    async function submitModel() {
+      const name = document.getElementById('model-name').value.trim();
+      const typeId = document.getElementById('model-type-select').value;
+      const ioFile = document.getElementById('model-io').files[0];
+      const glbFile = document.getElementById('model-glb').files[0];
+      const manualFile = document.getElementById('model-manual').files[0];
+      if (!name || !typeId || !ioFile || !glbFile) return alert('请填写必填项');
+      const fd = new FormData();
+      fd.append('name', name);
+      fd.append('model_type_id', typeId);
+      fd.append('io_file', ioFile);
+      fd.append('glb_file', glbFile);
+      if (manualFile) fd.append('manual_file', manualFile);
+      try {
+        const res = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
+        const json = await res.json();
+        if (json.error === 'DUPLICATE_MODEL_NAME') {
+          if (!confirm(`模型名称已存在(${json.data.existingCount}个)，是否继续？`)) return;
+          fd.append('confirm_duplicate', 'true');
+          const res2 = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
+          const json2 = await res2.json();
+          if (!json2.success) return alert(json2.message || '上传失败');
+        } else if (json.error === 'DUPLICATE_PARTS_MATCH') {
+          if (!confirm(`存在相同零件组合的模型(${json.data.matchedCount}个)，是否继续？`)) return;
+          fd.append('confirm_exact_match', 'true');
+          const res2 = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
+          const json2 = await res2.json();
+          if (!json2.success) return alert(json2.message || '上传失败');
+        } else if (!json.success) {
+          return alert(json.message || '上传失败');
+        }
+        closeModal('model-modal');
+        loadModels();
+      } catch(e) { alert('请求失败'); }
+    }
+
+    async function deleteModel(id) {
+      if (!confirm('确认删除该模型？')) return;
+      await fetch(API + '/api/admin/models/' + id, { method: 'DELETE' });
+      loadModels();
+    }
+
+    // ---- Recommended ----
+    async function loadRecommended() {
+      const el = document.getElementById('recommended-list');
+      el.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const res = await fetch(API + '/api/admin/recommended-models/list');
+        const json = await res.json();
+        const items = json.data || [];
+        if (!items.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+        el.innerHTML = `<table class="table">
+          <thead><tr><th>ID</th><th>封面</th><th>套装号</th><th>名称</th><th>系列</th><th>零件数</th><th>价格</th><th>操作</th></tr></thead>
+          <tbody>${items.map(m => `<tr>
+            <td>${m.id}</td>
+            <td><img src="${m.coverUrl}" class="img-preview"></td>
+            <td>${m.setNumber}</td><td>${m.name}</td>
+            <td>${m.series || '-'}</td><td>${m.partCount}</td><td>¥${m.price}</td>
+            <td><button class="btn btn-danger" onclick="deleteRecommended(${m.id})">删除</button></td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+    }
+
+    function showAddRecommended() {
+      ['rec-set-number','rec-name','rec-series','rec-part-count','rec-price','rec-age-rating'].forEach(id => document.getElementById(id).value = '');
+      ['rec-cover','rec-display','rec-details'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('recommended-modal').classList.add('show');
+    }
+
+    async function submitRecommended() {
+      const fd = new FormData();
+      fd.append('set_number', document.getElementById('rec-set-number').value.trim());
+      fd.append('name', document.getElementById('rec-name').value.trim());
+      fd.append('series', document.getElementById('rec-series').value.trim());
+      fd.append('part_count', document.getElementById('rec-part-count').value);
+      fd.append('price', document.getElementById('rec-price').value);
+      fd.append('age_rating', document.getElementById('rec-age-rating').value.trim());
+      const cover = document.getElementById('rec-cover').files[0];
+      const display = document.getElementById('rec-display').files[0];
+      if (!fd.get('set_number') || !fd.get('name') || !fd.get('part_count') || !fd.get('price') || !cover || !display)
+        return alert('请填写必填项');
+      fd.append('cover_image', cover);
+      fd.append('display_image', display);
+      Array.from(document.getElementById('rec-details').files).forEach(f => fd.append('detail_images', f));
+      try {
+        const res = await fetch(API + '/api/admin/recommended-models/upload', { method: 'POST', body: fd });
+        const json = await res.json();
+        if (!json.success) return alert(json.message || '上传失败');
+        closeModal('recommended-modal');
+        loadRecommended();
+      } catch(e) { alert('请求失败'); }
+    }
+
+    async function deleteRecommended(id) {
+      if (!confirm('确认删除该商品？')) return;
+      await fetch(API + '/api/admin/recommended-models/' + id, { method: 'DELETE' });
+      loadRecommended();
+    }
+
+    // ---- Works ----
+    async function loadWorks() {
+      const el = document.getElementById('works-list');
+      el.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const res = await fetch(API + '/api/works');
+        const json = await res.json();
+        const works = json.data || [];
+        if (!works.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+        el.innerHTML = `<table class="table">
+          <thead><tr><th>ID</th><th>图片</th><th>名称</th><th>分类</th><th>用户ID</th><th>点赞</th><th>公开</th><th>创建时间</th></tr></thead>
+          <tbody>${works.map(w => `<tr>
+            <td>${w.id}</td>
+            <td><img src="${w.imageUrl}" class="img-preview"></td>
+            <td>${w.name}</td><td>${w.category}</td>
+            <td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis">${w.userId}</td>
+            <td>${w.likeCount}</td>
+            <td><span class="badge ${w.isPublic ? 'badge-success' : 'badge-warning'}">${w.isPublic ? '公开' : '私密'}</span></td>
+            <td>${new Date(w.createdAt).toLocaleString()}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+    }
+
+    // ---- Users ----
+    async function loadUsers() {
+      document.getElementById('users-list').innerHTML = '<div class="empty">请通过用户ID查询</div>';
+    }
+
+    // Init
+    loadModels();
+  </script>
+</body>
+</html>

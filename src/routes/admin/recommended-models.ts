@@ -135,4 +135,14 @@ export async function recommendedModelsRoutes(app: FastifyInstance) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }
   });
+
+  app.delete('/:id', async (request, reply) => {
+    try {
+      const id = Number((request.params as any).id);
+      await prisma.recommendedModel.delete({ where: { id } });
+      return reply.send({ success: true, message: 'Recommended model deleted' });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
 }
