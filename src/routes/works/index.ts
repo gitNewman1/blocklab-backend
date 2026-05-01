@@ -49,17 +49,10 @@ export async function workRoutes(app: FastifyInstance) {
       const user = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } });
       if (!user) return reply.code(400).send({ success: false, message: 'User not found', error: 'INVALID_USER_ID' });
 
-      const extraTags: string[] = [];
-      if (body.category) extraTags.push(body.category);
-      if (body.partCount) extraTags.push(`${body.partCount} PCS`);
-      if (body.generate3d) extraTags.push('#支持 3D 模型');
-      if (body.joinContest) extraTags.push('#MOC 创意赛');
-      const tags = [...(body.tags ?? []), ...extraTags];
-
       const work = await prisma.work.create({ data: {
         userId: body.userId, imageUrl: body.imageUrl, name: body.name,
         category: body.category ?? 'OTHER', partCount: body.partCount ?? null,
-        description: body.description, tags,
+        description: body.description, tags: body.tags ?? [],
         generate3d: body.generate3d ?? false, isPublic: body.isPublic ?? true, joinContest: body.joinContest ?? false,
         hunyuan3dStatus: body.generate3d ? 'pending' : null
       }});
