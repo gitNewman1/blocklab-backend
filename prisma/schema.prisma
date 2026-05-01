@@ -38,21 +38,12 @@ model User {
   @@map("users")
 }
 
-enum WorkCategory {
-  TECHNOLOGY
-  VEHICLE
-  FOOD
-  ANIMAL
-  ARCHITECTURE
-  OTHER
-}
-
 model Work {
   id            Int          @id @default(autoincrement())
   userId        String       @map("user_id")
   imageUrl      String       @map("image_url")
   name          String       @db.VarChar(100)
-  category      WorkCategory @default(OTHER)
+  category      String       @default("OTHER")
   partCount     Int?         @map("part_count")
   description   String
   tags          String[]

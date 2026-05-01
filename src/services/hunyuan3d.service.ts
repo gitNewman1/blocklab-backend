@@ -42,6 +42,7 @@ async function callApi(action: string, payload: object): Promise<any> {
   });
 
   const json = await res.json() as any;
+  console.log(`[hunyuan3d] ${action} response:`, JSON.stringify(json));
   if (json.Response?.Error) throw new Error(`${json.Response.Error.Code}: ${json.Response.Error.Message}`);
   return json.Response;
 }

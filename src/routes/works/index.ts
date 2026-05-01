@@ -5,9 +5,7 @@ import { Hunyuan3dService } from '../../services/hunyuan3d.service';
 const prisma = new PrismaClient();
 const hunyuan3d = new Hunyuan3dService();
 
-const VALID_CATEGORIES = ['TECHNOLOGY', 'VEHICLE', 'FOOD', 'ANIMAL', 'ARCHITECTURE', 'OTHER'];
-
-const workFields = {
+const VALID_CATEGORIES = ['TECHNOLOGY', 'VEHICLE', 'FOOD', 'ANIMAL', 'ARCHITECTURE', 'OTHER'];const workFields = {
   id: true, userId: true, imageUrl: true, name: true,
   category: true, partCount: true, description: true, tags: true,
   isPublic: true, joinContest: true, createdAt: true,
@@ -35,7 +33,7 @@ export async function workRoutes(app: FastifyInstance) {
           userId:      { type: 'string' },
           imageUrl:    { type: 'string' },
           name:        { type: 'string', maxLength: 100 },
-          category:    { type: 'string', enum: VALID_CATEGORIES, default: 'OTHER' },
+          category:    { type: 'string', default: 'OTHER' },
           partCount:   { type: 'integer', minimum: 0 },
           description: { type: 'string' },
           tags:        { type: 'array', items: { type: 'string' }, default: [] },
@@ -50,18 +48,33 @@ export async function workRoutes(app: FastifyInstance) {
       const body = request.body as any;
       const user = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } });
       if (!user) return reply.code(400).send({ success: false, message: 'User not found', error: 'INVALID_USER_ID' });
+
+      const extraTags: string[] = [];
+      if (body.category) extraTags.push(body.category);
+      if (body.partCount) extraTags.push(`${body.partCount} PCS`);
+      if (body.generate3d) extraTags.push('#支持 3D 模型');
+      if (body.joinContest) extraTags.push('#MOC 创意赛');
+      const tags = [...(body.tags ?? []), ...extraTags];
+
       const work = await prisma.work.create({ data: {
         userId: body.userId, imageUrl: body.imageUrl, name: body.name,
         category: body.category ?? 'OTHER', partCount: body.partCount ?? null,
-        description: body.description, tags: body.tags ?? [],
+        description: body.description, tags,
         generate3d: body.generate3d ?? false, isPublic: body.isPublic ?? true, joinContest: body.joinContest ?? false,
         hunyuan3dStatus: body.generate3d ? 'pending' : null
       }});
 
       if (body.generate3d) {
+        console.log(`[3d] submitting job for work ${work.id}, imageUrl: ${body.imageUrl}`);
         hunyuan3d.submitJob(body.imageUrl)
-          .then(jobId => prisma.work.update({ where: { id: work.id }, data: { hunyuan3dTaskId: jobId, hunyuan3dStatus: 'processing' } }))
-          .catch(() => prisma.work.update({ where: { id: work.id }, data: { hunyuan3dStatus: 'failed' } }));
+          .then(jobId => {
+            console.log(`[3d] job submitted, work ${work.id}, jobId: ${jobId}`);
+            return prisma.work.update({ where: { id: work.id }, data: { hunyuan3dTaskId: jobId, hunyuan3dStatus: 'processing' } });
+          })
+          .catch(err => {
+            console.error(`[3d] submit failed, work ${work.id}:`, err.message);
+            return prisma.work.update({ where: { id: work.id }, data: { hunyuan3dStatus: 'failed' } });
+          });
       }
 
       return reply.code(201).send({ success: true, message: 'Work published successfully', data: work });
@@ -79,7 +92,7 @@ export async function workRoutes(app: FastifyInstance) {
         properties: {
           userId:   { type: 'string', description: '当前用户 ID，用于判断是否已点赞' },
           filterUserId: { type: 'string', description: '按作者 ID 过滤' },
-          category: { type: 'string', enum: VALID_CATEGORIES }
+          category: { type: 'string' }
         }
       }
     }
