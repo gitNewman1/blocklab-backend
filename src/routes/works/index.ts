@@ -16,16 +16,21 @@ const VALID_CATEGORIES = ['TECHNOLOGY', 'VEHICLE', 'FOOD', 'ANIMAL', 'ARCHITECTU
   id: true, userId: true, imageUrl: true, name: true,
   category: true, partCount: true, description: true, tags: true,
   isPublic: true, joinContest: true, createdAt: true,
-  _count: { select: { likes: true } }
+  _count: { select: { likes: true } },
+  user: { select: { nickname: true, unionId: true } }
 };
 
+function getUserNickname(user: { nickname: string | null; unionId: string }) {
+  return user.nickname ?? `积木${user.unionId.slice(0, 6)}`;
+}
+
 async function withLiked(works: any[], userId?: string) {
-  return works.map(w => ({ ...w, createdAt: fmtDate(w.createdAt), likeCount: w._count.likes, liked: false, _count: undefined }));
+  if (!userId) return works.map(w => ({ ...w, userName: getUserNickname(w.user), user: undefined, createdAt: fmtDate(w.createdAt), likeCount: w._count.likes, liked: false, _count: undefined }));
   const likedIds = new Set(
     (await prisma.workLike.findMany({ where: { userId, workId: { in: works.map(w => w.id) } }, select: { workId: true } }))
       .map(l => l.workId)
   );
-  return works.map(w => ({ ...w, createdAt: fmtDate(w.createdAt), likeCount: w._count.likes, liked: likedIds.has(w.id), _count: undefined }));
+  return works.map(w => ({ ...w, userName: getUserNickname(w.user), user: undefined, createdAt: fmtDate(w.createdAt), likeCount: w._count.likes, liked: likedIds.has(w.id), _count: undefined }));
 }
 
 export async function workRoutes(app: FastifyInstance) {
@@ -342,8 +347,8 @@ export async function workRoutes(app: FastifyInstance) {
         ? !!(await prisma.workLike.findUnique({ where: { userId_workId: { userId, workId } } }))
         : false;
 
-      const { _count, hunyuan3dTaskId, ...rest } = w;
-      return reply.send({ success: true, message: 'Work fetched successfully', data: { ...rest, createdAt: fmtDate(rest.createdAt), likeCount: _count.likes, liked } });
+      const { _count, hunyuan3dTaskId, user, ...rest } = w;
+      return reply.send({ success: true, message: 'Work fetched successfully', data: { ...rest, userName: getUserNickname(user), createdAt: fmtDate(rest.createdAt), likeCount: _count.likes, liked } });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }
