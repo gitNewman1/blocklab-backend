@@ -318,15 +318,31 @@ export async function workRoutes(app: FastifyInstance) {
       }
       const work = await prisma.work.findUnique({
         where: { id: workId },
-        select: { ...workFields, description: true, generate3d: true }
+        select: { ...workFields, description: true, generate3d: true, hunyuan3dTaskId: true, hunyuan3dStatus: true, model3dUrl: true }
       });
       if (!work) return reply.code(404).send({ success: false, message: 'Work not found', error: 'WORK_NOT_FOUND' });
+
+      // 如果3D任务处理中，查询最新状态
+      const w = work as any;
+      if (w.hunyuan3dTaskId && w.hunyuan3dStatus === 'processing') {
+        try {
+          const result = await hunyuan3d.queryJob(w.hunyuan3dTaskId);
+          if (result.status === 'DONE') {
+            await prisma.work.update({ where: { id: workId }, data: { hunyuan3dStatus: 'done', model3dUrl: result.modelUrl } });
+            w.hunyuan3dStatus = 'done';
+            w.model3dUrl = result.modelUrl ?? null;
+          } else if (result.status === 'FAIL') {
+            await prisma.work.update({ where: { id: workId }, data: { hunyuan3dStatus: 'failed' } });
+            w.hunyuan3dStatus = 'failed';
+          }
+        } catch {}
+      }
 
       const liked = userId
         ? !!(await prisma.workLike.findUnique({ where: { userId_workId: { userId, workId } } }))
         : false;
 
-      const { _count, ...rest } = work as any;
+      const { _count, hunyuan3dTaskId, ...rest } = w;
       return reply.send({ success: true, message: 'Work fetched successfully', data: { ...rest, createdAt: fmtDate(rest.createdAt), likeCount: _count.likes, liked } });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });

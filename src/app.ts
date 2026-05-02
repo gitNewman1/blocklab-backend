@@ -25,8 +25,7 @@ export async function buildApp() {
   await app.register(cors);
   await app.register(staticFiles, {
     root: path.join(__dirname, '..', 'public'),
-    prefix: '/',
-    etag: false
+    prefix: '/'
   });
   await app.register(multipart, {
     limits: {
