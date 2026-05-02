@@ -24,9 +24,20 @@ async function callApi(action: string, payload: object): Promise<any> {
   const contentType = 'application/json; charset=utf-8';
   const canonicalRequest = `POST\n/\n\ncontent-type:${contentType}\nhost:${HOST}\nx-tc-action:${action.toLowerCase()}\n\ncontent-type;host;x-tc-action\n${hashedPayload}`;
   const credentialScope = `${date}/${SERVICE}/tc3_request`;
-  const stringToSign = `TC3-HMAC-SHA256\n${now}\n${credentialScope}\n${crypto.createHash('sha256').update(canonicalRequest).digest('hex')}`;
+  const hashedCanonicalRequest = crypto.createHash('sha256').update(canonicalRequest).digest('hex');
+  const stringToSign = `TC3-HMAC-SHA256\n${now}\n${credentialScope}\n${hashedCanonicalRequest}`;
   const signature = sign(secretKey, date, SERVICE, stringToSign);
   const authorization = `TC3-HMAC-SHA256 Credential=${secretId}/${credentialScope}, SignedHeaders=content-type;host;x-tc-action, Signature=${signature}`;
+
+  console.log('[hunyuan3d] === sign debug ===');
+  console.log('[hunyuan3d] body:', body);
+  console.log('[hunyuan3d] timestamp:', now, 'date:', date);
+  console.log('[hunyuan3d] hashedPayload:', hashedPayload);
+  console.log('[hunyuan3d] canonicalRequest:\n' + canonicalRequest);
+  console.log('[hunyuan3d] hashedCanonicalRequest:', hashedCanonicalRequest);
+  console.log('[hunyuan3d] stringToSign:\n' + stringToSign);
+  console.log('[hunyuan3d] signature:', signature);
+  console.log('[hunyuan3d] authorization:', authorization);
 
   const res = await fetch(`https://${HOST}`, {
     method: 'POST',
