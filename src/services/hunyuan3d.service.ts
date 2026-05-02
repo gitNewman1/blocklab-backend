@@ -29,16 +29,6 @@ async function callApi(action: string, payload: object): Promise<any> {
   const signature = sign(secretKey, date, SERVICE, stringToSign);
   const authorization = `TC3-HMAC-SHA256 Credential=${secretId}/${credentialScope}, SignedHeaders=content-type;host;x-tc-action, Signature=${signature}`;
 
-  console.log('[hunyuan3d] === sign debug ===');
-  console.log('[hunyuan3d] body:', body);
-  console.log('[hunyuan3d] timestamp:', now, 'date:', date);
-  console.log('[hunyuan3d] hashedPayload:', hashedPayload);
-  console.log('[hunyuan3d] canonicalRequest:\n' + canonicalRequest);
-  console.log('[hunyuan3d] hashedCanonicalRequest:', hashedCanonicalRequest);
-  console.log('[hunyuan3d] stringToSign:\n' + stringToSign);
-  console.log('[hunyuan3d] signature:', signature);
-  console.log('[hunyuan3d] authorization:', authorization);
-
   const res = await fetch(`https://${HOST}`, {
     method: 'POST',
     headers: {
