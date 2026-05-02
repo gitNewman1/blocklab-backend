@@ -5,6 +5,13 @@ import { Hunyuan3dService } from '../../services/hunyuan3d.service';
 const prisma = new PrismaClient();
 const hunyuan3d = new Hunyuan3dService();
 
+function fmtDate(d: Date | string | null | undefined): string | null {
+  if (!d) return null;
+  const dt = typeof d === 'string' ? new Date(d) : d;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`;
+}
+
 const VALID_CATEGORIES = ['TECHNOLOGY', 'VEHICLE', 'FOOD', 'ANIMAL', 'ARCHITECTURE', 'OTHER'];const workFields = {
   id: true, userId: true, imageUrl: true, name: true,
   category: true, partCount: true, description: true, tags: true,
@@ -13,12 +20,12 @@ const VALID_CATEGORIES = ['TECHNOLOGY', 'VEHICLE', 'FOOD', 'ANIMAL', 'ARCHITECTU
 };
 
 async function withLiked(works: any[], userId?: string) {
-  if (!userId) return works.map(w => ({ ...w, likeCount: w._count.likes, liked: false, _count: undefined }));
+  return works.map(w => ({ ...w, createdAt: fmtDate(w.createdAt), likeCount: w._count.likes, liked: false, _count: undefined }));
   const likedIds = new Set(
     (await prisma.workLike.findMany({ where: { userId, workId: { in: works.map(w => w.id) } }, select: { workId: true } }))
       .map(l => l.workId)
   );
-  return works.map(w => ({ ...w, likeCount: w._count.likes, liked: likedIds.has(w.id), _count: undefined }));
+  return works.map(w => ({ ...w, createdAt: fmtDate(w.createdAt), likeCount: w._count.likes, liked: likedIds.has(w.id), _count: undefined }));
 }
 
 export async function workRoutes(app: FastifyInstance) {
@@ -58,19 +65,15 @@ export async function workRoutes(app: FastifyInstance) {
       }});
 
       if (body.generate3d) {
-        console.log(`[3d] submitting job for work ${work.id}, imageUrl: ${body.imageUrl}`);
         hunyuan3d.submitJob(body.imageUrl)
-          .then(jobId => {
-            console.log(`[3d] job submitted, work ${work.id}, jobId: ${jobId}`);
-            return prisma.work.update({ where: { id: work.id }, data: { hunyuan3dTaskId: jobId, hunyuan3dStatus: 'processing' } });
-          })
+          .then(jobId => prisma.work.update({ where: { id: work.id }, data: { hunyuan3dTaskId: jobId, hunyuan3dStatus: 'processing' } }))
           .catch(err => {
             console.error(`[3d] submit failed, work ${work.id}:`, err.message);
             return prisma.work.update({ where: { id: work.id }, data: { hunyuan3dStatus: 'failed' } });
           });
       }
 
-      return reply.code(201).send({ success: true, message: 'Work published successfully', data: work });
+      return reply.code(201).send({ success: true, message: 'Work published successfully', data: { ...work, createdAt: fmtDate(work.createdAt) } });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }
@@ -128,7 +131,7 @@ export async function workRoutes(app: FastifyInstance) {
       });
       return reply.send({
         success: true, message: 'Liked works fetched successfully',
-        data: likes.map(l => ({ ...l.work, likeCount: l.work._count.likes, liked: true, _count: undefined, likedAt: l.createdAt }))
+        data: likes.map(l => ({ ...l.work, likeCount: l.work._count.likes, liked: true, _count: undefined, likedAt: fmtDate(l.createdAt) }))
       });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
@@ -159,7 +162,7 @@ export async function workRoutes(app: FastifyInstance) {
       });
       return reply.send({
         success: true, message: 'Received likes fetched successfully',
-        data: likes.map(l => ({ workId: l.work.id, workName: l.work.name, likerUserId: l.userId, likerNickname: l.user.nickname ?? `积木${l.user.unionId.slice(0, 6)}`, likedAt: l.createdAt }))
+        data: likes.map(l => ({ workId: l.work.id, workName: l.work.name, likerUserId: l.userId, likerNickname: l.user.nickname ?? `积木${l.user.unionId.slice(0, 6)}`, likedAt: fmtDate(l.createdAt) }))
       });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
@@ -209,7 +212,7 @@ export async function workRoutes(app: FastifyInstance) {
       return reply.send({
         success: true, message: 'Publish messages fetched successfully',
         data: works.map(w => ({
-          workId: w.id, name: w.name, imageUrl: w.imageUrl, publishedAt: w.createdAt,
+          workId: w.id, name: w.name, imageUrl: w.imageUrl, publishedAt: fmtDate(w.createdAt),
           generate3d: w.generate3d,
           hunyuan3dStatus: w.hunyuan3dStatus,
           model3dUrl: w.model3dUrl
@@ -248,6 +251,23 @@ export async function workRoutes(app: FastifyInstance) {
         return reply.send({ success: true, data: { status: 'failed', model3dUrl: null } });
       }
       return reply.send({ success: true, data: { status: 'processing', model3dUrl: null } });
+    } catch (error: any) {
+      return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+    }
+  });
+
+  // 删除作品
+  app.delete('/:id', {
+    schema: {
+      tags: ['Works'], summary: '删除作品',
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } }
+    }
+  }, async (request, reply) => {
+    try {
+      const workId = Number((request.params as any).id);
+      await prisma.workLike.deleteMany({ where: { workId } });
+      await prisma.work.delete({ where: { id: workId } });
+      return reply.send({ success: true, message: 'Work deleted successfully' });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }
@@ -307,7 +327,7 @@ export async function workRoutes(app: FastifyInstance) {
         : false;
 
       const { _count, ...rest } = work as any;
-      return reply.send({ success: true, message: 'Work fetched successfully', data: { ...rest, likeCount: _count.likes, liked } });
+      return reply.send({ success: true, message: 'Work fetched successfully', data: { ...rest, createdAt: fmtDate(rest.createdAt), likeCount: _count.likes, liked } });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }

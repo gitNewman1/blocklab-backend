@@ -419,7 +419,7 @@
         const works = json.data || [];
         if (!works.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
         el.innerHTML = `<table class="table">
-          <thead><tr><th>ID</th><th>图片</th><th>名称</th><th>分类</th><th>用户ID</th><th>点赞</th><th>公开</th><th>创建时间</th></tr></thead>
+          <thead><tr><th>ID</th><th>图片</th><th>名称</th><th>分类</th><th>用户ID</th><th>点赞</th><th>公开</th><th>创建时间</th><th>操作</th></tr></thead>
           <tbody>${works.map(w => `<tr>
             <td>${w.id}</td>
             <td><img src="${w.imageUrl}" class="img-preview"></td>
@@ -427,14 +427,20 @@
             <td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis">${w.userId}</td>
             <td>${w.likeCount}</td>
             <td><span class="badge ${w.isPublic ? 'badge-success' : 'badge-warning'}">${w.isPublic ? '公开' : '私密'}</span></td>
-            <td>${new Date(w.createdAt).toLocaleString()}</td>
+            <td>${w.createdAt}</td>
+            <td><button class="btn btn-danger" onclick="deleteWork(${w.id})">删除</button></td>
           </tr>`).join('')}</tbody>
         </table>`;
       } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
     }
 
-    // ---- Users ----
-    async function loadUsers() {
+    async function deleteWork(id) {
+      if (!confirm('确认删除该作品？')) return;
+      await fetch(API + '/api/works/' + id, { method: 'DELETE' });
+      loadWorks();
+    }
+
+    // ---- Users ----    async function loadUsers() {
       document.getElementById('users-list').innerHTML = '<div class="empty">请通过用户ID查询</div>';
     }
 
