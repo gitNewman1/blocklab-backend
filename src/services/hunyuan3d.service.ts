@@ -21,7 +21,8 @@ async function callApi(action: string, payload: object): Promise<any> {
   const date = new Date(now * 1000).toISOString().slice(0, 10);
 
   const hashedPayload = crypto.createHash('sha256').update(body).digest('hex');
-  const canonicalRequest = `POST\n/\n\ncontent-type:application/json\nhost:${HOST}\nx-tc-action:${action.toLowerCase()}\n\ncontent-type;host;x-tc-action\n${hashedPayload}`;
+  const contentType = 'application/json; charset=utf-8';
+  const canonicalRequest = `POST\n/\n\ncontent-type:${contentType}\nhost:${HOST}\nx-tc-action:${action.toLowerCase()}\n\ncontent-type;host;x-tc-action\n${hashedPayload}`;
   const credentialScope = `${date}/${SERVICE}/tc3_request`;
   const stringToSign = `TC3-HMAC-SHA256\n${now}\n${credentialScope}\n${crypto.createHash('sha256').update(canonicalRequest).digest('hex')}`;
   const signature = sign(secretKey, date, SERVICE, stringToSign);
@@ -30,7 +31,7 @@ async function callApi(action: string, payload: object): Promise<any> {
   const res = await fetch(`https://${HOST}`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
+      'Content-Type': contentType,
       'Host': HOST,
       'X-TC-Action': action,
       'X-TC-Version': VERSION,
