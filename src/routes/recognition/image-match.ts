@@ -55,6 +55,15 @@ type ScoredMatch = {
   matchType: 'exact' | 'fuzzy';
   similarity: number;
   matchedQty: number;
+  missingPartCount: number;
+  missingParts: MissingPart[];
+};
+
+type MissingPart = {
+  designId: string | null;
+  imgUrl: string | null;
+  name: string | null;
+  missingQuantity: number;
 };
 
 type Detection = {
@@ -174,6 +183,8 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
           const modelTotalQty = sumVector(model.vector);
           const similarity = calculateModelCoverageScore(matchedQty, modelTotalQty);
           const matchType: 'exact' | 'fuzzy' = similarity >= 1 ? 'exact' : 'fuzzy';
+          const missingParts = calculateMissingParts(requestVector, model.partsJson);
+          const missingPartCount = missingParts.reduce((sum, item) => sum + item.missingQuantity, 0);
           return {
             id: model.id,
             name: model.name,
@@ -186,7 +197,9 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
             model3dUrl: model.model3dUrl,
             matchType,
             similarity,
-            matchedQty
+            matchedQty,
+            missingPartCount,
+            missingParts
           };
         })
         .sort(sortByRule)
@@ -629,6 +642,45 @@ function calculateModelCoverageScore(matchedQty: number, modelTotalQty: number):
   return matchedQty / modelTotalQty;
 }
 
+function calculateMissingParts(
+  requestVector: Map<string, number>,
+  partsJson: unknown
+): MissingPart[] {
+  if (!Array.isArray(partsJson)) {
+    return [];
+  }
+
+  const missingParts: MissingPart[] = [];
+  for (const item of partsJson) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+
+    const part = item as Record<string, unknown>;
+    const name = typeof part.name === 'string' ? part.name.trim() : '';
+    const key = normalizePartKey(name);
+    const requiredQty = Number(part.quantity || 0);
+    if (!key || !Number.isFinite(requiredQty) || requiredQty <= 0) {
+      continue;
+    }
+
+    const detectedQty = requestVector.get(key) || 0;
+    const missingQuantity = Math.max(requiredQty - detectedQty, 0);
+    if (missingQuantity <= 0) {
+      continue;
+    }
+
+    missingParts.push({
+      designId: typeof part.designID === 'string' ? part.designID : null,
+      imgUrl: typeof part.imgUrl === 'string' ? part.imgUrl : null,
+      name: name || null,
+      missingQuantity
+    });
+  }
+
+  return missingParts;
+}
+
 function sortByRule(a: ScoredMatch, b: ScoredMatch): number {
   if (b.similarity !== a.similarity) {
     return b.similarity - a.similarity;
@@ -655,7 +707,9 @@ function toResponseItem(item: ScoredMatch) {
     ioFileUrl: item.ioFileUrl,
     model3dUrl: item.model3dUrl,
     matchType: item.matchType,
-    score
+    score,
+    missingPartCount: item.missingPartCount,
+    missingParts: item.missingParts
   };
 }
 
