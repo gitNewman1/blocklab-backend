@@ -54,7 +54,7 @@ type ScoredMatch = {
   model3dUrl: string;
   matchType: 'exact' | 'fuzzy';
   similarity: number;
-  qtyDiff: number;
+  matchedQty: number;
 };
 
 type Detection = {
@@ -132,8 +132,6 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
 
       const recognizedParts = aggregateDetectionsToInputParts(detections);
       const requestVector = buildVector(recognizedParts);
-      const requestSignature = buildSignatureFromVector(requestVector);
-      const requestTotalQty = sumVector(requestVector);
 
       const models = await prisma.model.findMany({
         select: {
@@ -170,33 +168,12 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
         }))
         .filter((m) => m.vector.size > 0);
 
-      const exactMatches: ScoredMatch[] = modelVectors
-        .filter((model) => buildSignatureFromVector(model.vector) === requestSignature)
-        .map((model) => ({
-          id: model.id,
-          name: model.name,
-          partCount: model.partCount,
-          modelTypeId: model.modelTypeId,
-          modelTypeName: model.modelTypeName,
-          thumbnailUrl: model.thumbnailUrl,
-          manualUrl: model.manualUrl,
-          ioFileUrl: model.ioFileUrl,
-          model3dUrl: model.model3dUrl,
-          matchType: 'exact' as const,
-          similarity: 1,
-          qtyDiff: Math.abs(sumVector(model.vector) - requestTotalQty)
-        }));
-
-      let matches: ScoredMatch[];
-      if (exactMatches.length >= 4) {
-        exactMatches.sort(sortByRule);
-        matches = exactMatches.slice(0, topK);
-      } else {
-        const fuzzyMatches: ScoredMatch[] = modelVectors.map((model) => {
-          const similarity = calculateWeightedJaccard(requestVector, model.vector);
-          const modelSignature = buildSignatureFromVector(model.vector);
-          const matchType: 'exact' | 'fuzzy' =
-            modelSignature === requestSignature ? 'exact' : 'fuzzy';
+      const matches: ScoredMatch[] = modelVectors
+        .map((model) => {
+          const matchedQty = calculateMatchedQty(requestVector, model.vector);
+          const modelTotalQty = sumVector(model.vector);
+          const similarity = calculateModelCoverageScore(matchedQty, modelTotalQty);
+          const matchType: 'exact' | 'fuzzy' = similarity >= 1 ? 'exact' : 'fuzzy';
           return {
             id: model.id,
             name: model.name,
@@ -209,13 +186,11 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
             model3dUrl: model.model3dUrl,
             matchType,
             similarity,
-            qtyDiff: Math.abs(sumVector(model.vector) - requestTotalQty)
+            matchedQty
           };
-        });
-
-        fuzzyMatches.sort(sortByRule);
-        matches = fuzzyMatches.slice(0, topK);
-      }
+        })
+        .sort(sortByRule)
+        .slice(0, topK);
 
       const recognizedImageBase64 = extractOutputImageBase64(roboflowRaw);
 
@@ -627,13 +602,6 @@ function buildVector(parts: InputPart[]): Map<string, number> {
   return map;
 }
 
-function buildSignatureFromVector(vector: Map<string, number>): string {
-  return Array.from(vector.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, quantity]) => `${name}:${quantity}`)
-    .join('|');
-}
-
 function sumVector(vector: Map<string, number>): number {
   let sum = 0;
   for (const qty of vector.values()) {
@@ -642,33 +610,34 @@ function sumVector(vector: Map<string, number>): number {
   return sum;
 }
 
-function calculateWeightedJaccard(
+function calculateMatchedQty(
   requestVector: Map<string, number>,
   modelVector: Map<string, number>
 ): number {
-  const allKeys = new Set<string>([...requestVector.keys(), ...modelVector.keys()]);
-  let intersection = 0;
-  let union = 0;
-
-  for (const key of allKeys) {
-    const q = requestVector.get(key) || 0;
-    const m = modelVector.get(key) || 0;
-    intersection += Math.min(q, m);
-    union += Math.max(q, m);
+  let matchedQty = 0;
+  for (const [key, requiredQty] of modelVector.entries()) {
+    const detectedQty = requestVector.get(key) || 0;
+    matchedQty += Math.min(detectedQty, requiredQty);
   }
+  return matchedQty;
+}
 
-  if (union <= 0) {
+function calculateModelCoverageScore(matchedQty: number, modelTotalQty: number): number {
+  if (modelTotalQty <= 0) {
     return 0;
   }
-  return intersection / union;
+  return matchedQty / modelTotalQty;
 }
 
 function sortByRule(a: ScoredMatch, b: ScoredMatch): number {
   if (b.similarity !== a.similarity) {
     return b.similarity - a.similarity;
   }
-  if (a.qtyDiff !== b.qtyDiff) {
-    return a.qtyDiff - b.qtyDiff;
+  if (b.partCount !== a.partCount) {
+    return b.partCount - a.partCount;
+  }
+  if (b.matchedQty !== a.matchedQty) {
+    return b.matchedQty - a.matchedQty;
   }
   return a.id - b.id;
 }
