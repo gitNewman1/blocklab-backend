@@ -39,6 +39,7 @@ type ModelVector = {
   manualUrl: string | null;
   ioFileUrl: string;
   model3dUrl: string;
+  partsJson: unknown;
   vector: Map<string, number>;
 };
 
@@ -173,6 +174,7 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
           manualUrl: model.manualUrl,
           ioFileUrl: model.ioFileUrl,
           model3dUrl: model.model3dUrl,
+          partsJson: model.partsJson,
           vector: buildVector(extractNameQuantityFromPartsJson(model.partsJson))
         }))
         .filter((m) => m.vector.size > 0);
