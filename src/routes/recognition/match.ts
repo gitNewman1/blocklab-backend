@@ -11,6 +11,9 @@ type InputPart = {
 type ModelVector = {
   id: number;
   name: string;
+  partCount: number;
+  modelTypeId: number | null;
+  modelTypeName: string | null;
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
@@ -21,6 +24,9 @@ type ModelVector = {
 type ScoredMatch = {
   id: number;
   name: string;
+  partCount: number;
+  modelTypeId: number | null;
+  modelTypeName: string | null;
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
@@ -106,11 +112,19 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
         select: {
           id: true,
           name: true,
+          partCount: true,
+          modelTypeId: true,
           thumbnailUrl: true,
           manualUrl: true,
           ioFileUrl: true,
           model3dUrl: true,
-          partsJson: true
+          partsJson: true,
+          modelType: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
         }
       });
 
@@ -118,6 +132,9 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
         .map((model) => ({
           id: model.id,
           name: model.name,
+          partCount: model.partCount,
+          modelTypeId: model.modelType?.id ?? model.modelTypeId ?? null,
+          modelTypeName: model.modelType?.name ?? null,
           thumbnailUrl: model.thumbnailUrl,
           manualUrl: model.manualUrl,
           ioFileUrl: model.ioFileUrl,
@@ -131,6 +148,9 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
         .map((model) => ({
           id: model.id,
           name: model.name,
+          partCount: model.partCount,
+          modelTypeId: model.modelTypeId,
+          modelTypeName: model.modelTypeName,
           thumbnailUrl: model.thumbnailUrl,
           manualUrl: model.manualUrl,
           ioFileUrl: model.ioFileUrl,
@@ -168,6 +188,9 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
         return {
           id: model.id,
           name: model.name,
+          partCount: model.partCount,
+          modelTypeId: model.modelTypeId,
+          modelTypeName: model.modelTypeName,
           thumbnailUrl: model.thumbnailUrl,
           manualUrl: model.manualUrl,
           ioFileUrl: model.ioFileUrl,
@@ -327,6 +350,9 @@ function toResponseItem(item: ScoredMatch) {
   return {
     id: item.id,
     name: item.name,
+    partCount: item.partCount,
+    modelTypeId: item.modelTypeId,
+    modelTypeName: item.modelTypeName,
     thumbnailUrl: item.thumbnailUrl,
     manualUrl: item.manualUrl,
     ioFileUrl: item.ioFileUrl,

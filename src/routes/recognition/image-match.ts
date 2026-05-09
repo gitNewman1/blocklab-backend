@@ -32,6 +32,9 @@ type RecognizedPart = InputPart & {
 type ModelVector = {
   id: number;
   name: string;
+  partCount: number;
+  modelTypeId: number | null;
+  modelTypeName: string | null;
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
@@ -42,6 +45,9 @@ type ModelVector = {
 type ScoredMatch = {
   id: number;
   name: string;
+  partCount: number;
+  modelTypeId: number | null;
+  modelTypeName: string | null;
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
@@ -64,6 +70,9 @@ type Detection = {
 type ModelDetailResponse = {
   id: number;
   name: string;
+  partCount: number;
+  modelTypeId: number | null;
+  modelTypeName: string | null;
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
@@ -130,11 +139,19 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
         select: {
           id: true,
           name: true,
+          partCount: true,
+          modelTypeId: true,
           thumbnailUrl: true,
           manualUrl: true,
           ioFileUrl: true,
           model3dUrl: true,
-          partsJson: true
+          partsJson: true,
+          modelType: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
         }
       });
 
@@ -142,6 +159,9 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
         .map((model) => ({
           id: model.id,
           name: model.name,
+          partCount: model.partCount,
+          modelTypeId: model.modelType?.id ?? model.modelTypeId ?? null,
+          modelTypeName: model.modelType?.name ?? null,
           thumbnailUrl: model.thumbnailUrl,
           manualUrl: model.manualUrl,
           ioFileUrl: model.ioFileUrl,
@@ -155,6 +175,9 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
         .map((model) => ({
           id: model.id,
           name: model.name,
+          partCount: model.partCount,
+          modelTypeId: model.modelTypeId,
+          modelTypeName: model.modelTypeName,
           thumbnailUrl: model.thumbnailUrl,
           manualUrl: model.manualUrl,
           ioFileUrl: model.ioFileUrl,
@@ -177,6 +200,9 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
           return {
             id: model.id,
             name: model.name,
+            partCount: model.partCount,
+            modelTypeId: model.modelTypeId,
+            modelTypeName: model.modelTypeName,
             thumbnailUrl: model.thumbnailUrl,
             manualUrl: model.manualUrl,
             ioFileUrl: model.ioFileUrl,
@@ -242,17 +268,37 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
           select: {
             id: true,
             name: true,
+            partCount: true,
+            modelTypeId: true,
             thumbnailUrl: true,
             manualUrl: true,
             ioFileUrl: true,
             model3dUrl: true,
             partsJson: true,
-            stepsJson: true
+            stepsJson: true,
+            modelType: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
           }
         });
 
         if (bestModel) {
-          responseData.modelDetail = bestModel;
+          responseData.modelDetail = {
+            id: bestModel.id,
+            name: bestModel.name,
+            partCount: bestModel.partCount,
+            modelTypeId: bestModel.modelType?.id ?? bestModel.modelTypeId ?? null,
+            modelTypeName: bestModel.modelType?.name ?? null,
+            thumbnailUrl: bestModel.thumbnailUrl,
+            manualUrl: bestModel.manualUrl,
+            ioFileUrl: bestModel.ioFileUrl,
+            model3dUrl: bestModel.model3dUrl,
+            partsJson: bestModel.partsJson,
+            stepsJson: bestModel.stepsJson
+          };
         }
       }
 
@@ -632,6 +678,9 @@ function toResponseItem(item: ScoredMatch) {
   return {
     id: item.id,
     name: item.name,
+    partCount: item.partCount,
+    modelTypeId: item.modelTypeId,
+    modelTypeName: item.modelTypeName,
     thumbnailUrl: item.thumbnailUrl,
     manualUrl: item.manualUrl,
     ioFileUrl: item.ioFileUrl,
@@ -735,4 +784,3 @@ function extractPartsWithImgUrl(
       };
     });
 }
-
