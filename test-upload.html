@@ -477,6 +477,12 @@
         <div id="apiStatus" class="status"></div>
         <div class="json-title">操作结果 JSON</div>
         <pre id="apiJsonOutput" class="json-box">{}</pre>
+
+        <div id="recognizedImagePreviewWrap" style="display:none; margin-top: 12px;">
+          <div class="json-title">识别结果图预览</div>
+          <div id="recognizedImagePreviewMeta" class="field-hint" style="margin-bottom: 6px;"></div>
+          <img id="recognizedImagePreview" alt="识别结果图" style="max-width: 100%; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-soft);">
+        </div>
       </section>
     </div>
   </div>
@@ -501,11 +507,45 @@
       el.textContent = text;
     }
 
+    function collapseRecognizedImageBase64(node) {
+      if (node === null || typeof node !== 'object') return node;
+      if (Array.isArray(node)) return node.map(collapseRecognizedImageBase64);
+      const out = {};
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'recognizedImageBase64' && typeof value === 'string' && value.length > 0) {
+          out[key] = `<base64 已折叠，长度 ${value.length} 字符>`;
+        } else {
+          out[key] = collapseRecognizedImageBase64(value);
+        }
+      }
+      return out;
+    }
+
+    function updateRecognizedImagePreview(data) {
+      const wrap = document.getElementById('recognizedImagePreviewWrap');
+      const img = document.getElementById('recognizedImagePreview');
+      const meta = document.getElementById('recognizedImagePreviewMeta');
+      if (!wrap || !img || !meta) return;
+
+      const base64 = data && data.data && data.data.recognizedImageBase64;
+      if (typeof base64 === 'string' && base64.length > 0) {
+        img.src = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+        meta.textContent = `base64 长度：${base64.length} 字符`;
+        wrap.style.display = '';
+      } else {
+        img.removeAttribute('src');
+        meta.textContent = '';
+        wrap.style.display = 'none';
+      }
+    }
+
     function setJsonOutput(data) {
       const box = document.getElementById('apiJsonOutput');
-      box.textContent = JSON.stringify(data, null, 2);
+      const display = collapseRecognizedImageBase64(data);
+      box.textContent = JSON.stringify(display, null, 2);
       box.scrollTop = 0;
       box.scrollLeft = 0;
+      updateRecognizedImagePreview(data);
     }
 
     function formatElapsed(startedAt) {
