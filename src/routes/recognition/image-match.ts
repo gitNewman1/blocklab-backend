@@ -9,7 +9,8 @@ const storageService = new LocalStorageService();
 const roboflowService = new RoboflowService();
 
 type InputPart = {
-  name: string;
+  name?: string;
+  designId?: string | null;
   quantity: number;
 };
 
@@ -40,7 +41,7 @@ type ModelVector = {
   ioFileUrl: string;
   model3dUrl: string;
   partsJson: unknown;
-  vector: Map<string, number>;
+  parts: InputPart[];
 };
 
 type ScoredMatch = {
@@ -141,7 +142,7 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
       }
 
       const recognizedParts = aggregateDetectionsToInputParts(detections);
-      const requestVector = buildVector(recognizedParts);
+      const requestCounters = buildRequestCounters(recognizedParts);
 
       const models = await prisma.model.findMany({
         select: {
@@ -175,17 +176,17 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
           ioFileUrl: model.ioFileUrl,
           model3dUrl: model.model3dUrl,
           partsJson: model.partsJson,
-          vector: buildVector(extractNameQuantityFromPartsJson(model.partsJson))
+          parts: extractNameQuantityFromPartsJson(model.partsJson)
         }))
-        .filter((m) => m.vector.size > 0);
+        .filter((m) => m.parts.length > 0);
 
       const matches: ScoredMatch[] = modelVectors
         .map((model) => {
-          const matchedQty = calculateMatchedQty(requestVector, model.vector);
-          const modelTotalQty = sumVector(model.vector);
+          const matchedQty = calculateMatchedQty(requestCounters, model.parts);
+          const modelTotalQty = sumPartsQuantity(model.parts);
           const similarity = calculateModelCoverageScore(matchedQty, modelTotalQty);
           const matchType: 'exact' | 'fuzzy' = similarity >= 1 ? 'exact' : 'fuzzy';
-          const missingParts = calculateMissingParts(requestVector, model.partsJson);
+          const missingParts = calculateMissingParts(requestCounters, model.partsJson);
           const missingPartCount = missingParts.reduce((sum, item) => sum + item.missingQuantity, 0);
           return {
             id: model.id,
@@ -211,22 +212,29 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
 
       // Build imgUrl/designId map from best match model's partsJson
       const partInfoByName = new Map<string, { imgUrl: string | null; designId: string | null }>();
+      const partInfoByDesignId = new Map<string, { imgUrl: string | null; designId: string | null }>();
       if (matches.length > 0) {
         const bestModel = models.find((m) => m.id === matches[0].id);
         if (bestModel) {
           for (const item of extractPartsWithImgUrl(bestModel.partsJson)) {
+            const info = {
+              imgUrl: item.imgUrl ?? null,
+              designId: item.designId ?? null
+            };
             if (item.name) {
-              partInfoByName.set(normalizePartKey(item.name), {
-                imgUrl: item.imgUrl ?? null,
-                designId: item.designId ?? null
-              });
+              partInfoByName.set(normalizePartKey(item.name), info);
+            }
+            if (item.designId) {
+              partInfoByDesignId.set(normalizeDesignId(item.designId), info);
             }
           }
         }
       }
 
       const enrichedRecognizedParts: RecognizedPart[] = recognizedParts.map((p) => {
-        const info = partInfoByName.get(normalizePartKey(p.name));
+        const info =
+          (p.designId ? partInfoByDesignId.get(normalizeDesignId(p.designId)) : undefined) ||
+          partInfoByName.get(normalizePartKey(p.name || ''));
         return {
           ...p,
           imgUrl: info?.imgUrl ?? null,
@@ -495,6 +503,7 @@ function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPar
     string,
     {
       rawName: string;
+      designId: string | null;
       quantity: number;
       confidenceSum: number;
       confidenceMax: number;
@@ -503,7 +512,8 @@ function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPar
   >();
 
   for (const detection of detections) {
-    const normalized = normalizePartKey(detection.className);
+    const designId = extractNumericDesignId(detection.className);
+    const normalized = designId ? buildDesignIdKey(designId) : buildNameKey(detection.className);
     if (!normalized) {
       continue;
     }
@@ -520,6 +530,7 @@ function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPar
     if (!existing) {
       map.set(normalized, {
         rawName: detection.className,
+        designId,
         quantity: 1,
         confidenceSum: detection.confidence,
         confidenceMax: detection.confidence,
@@ -537,6 +548,7 @@ function aggregateDetectionsToInputParts(detections: Detection[]): RecognizedPar
   return Array.from(map.entries())
     .map(([, value]) => ({
       name: value.rawName,
+      designId: value.designId,
       quantity: value.quantity,
       avgConfidence: Number((value.confidenceSum / value.quantity).toFixed(4)),
       maxConfidence: Number(value.confidenceMax.toFixed(4)),
@@ -562,12 +574,13 @@ function extractNameQuantityFromPartsJson(partsJson: unknown): InputPart[] {
     }
     const part = item as Record<string, unknown>;
     const name = String(part.name || '').trim();
+    const designId = normalizeDesignId(part.designID);
     const quantity = Number(part.quantity || 0);
     const normalizedName = normalizePartKey(name);
-    if (!normalizedName || !Number.isFinite(quantity) || quantity <= 0) {
+    if ((!normalizedName && !designId) || !Number.isFinite(quantity) || quantity <= 0) {
       continue;
     }
-    out.push({ name: normalizedName, quantity });
+    out.push({ name: normalizedName || name || undefined, designId, quantity });
   }
   return out;
 }
@@ -605,34 +618,77 @@ function findTypeToken(tokens: string[]): string | undefined {
   return undefined;
 }
 
-function buildVector(parts: InputPart[]): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const part of parts) {
-    const key = normalizePartKey(part.name);
-    if (!key) {
-      continue;
-    }
-    map.set(key, (map.get(key) || 0) + part.quantity);
-  }
-  return map;
+function buildNameKey(name: string): string {
+  const normalized = normalizePartKey(name);
+  return normalized ? `name:${normalized}` : '';
 }
 
-function sumVector(vector: Map<string, number>): number {
+function buildDesignIdKey(designId: string): string {
+  const normalized = normalizeDesignId(designId);
+  return normalized ? `design:${normalized}` : '';
+}
+
+function normalizeDesignId(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function extractNumericDesignId(value: string): string | null {
+  const normalized = normalizeDesignId(value);
+  return /^\d+$/.test(normalized) ? normalized : null;
+}
+
+function buildRequestCounters(parts: InputPart[]): {
+  byName: Map<string, number>;
+  byDesignId: Map<string, number>;
+} {
+  const byName = new Map<string, number>();
+  const byDesignId = new Map<string, number>();
+
+  for (const part of parts) {
+    if (!Number.isFinite(part.quantity) || part.quantity <= 0) {
+      continue;
+    }
+
+    const designKey = part.designId ? buildDesignIdKey(part.designId) : '';
+    if (designKey) {
+      byDesignId.set(designKey, (byDesignId.get(designKey) || 0) + part.quantity);
+      continue;
+    }
+
+    const nameKey = part.name ? buildNameKey(part.name) : '';
+    if (!nameKey) {
+      continue;
+    }
+    byName.set(nameKey, (byName.get(nameKey) || 0) + part.quantity);
+  }
+
+  return { byName, byDesignId };
+}
+
+function sumPartsQuantity(parts: InputPart[]): number {
   let sum = 0;
-  for (const qty of vector.values()) {
-    sum += qty;
+  for (const part of parts) {
+    if (Number.isFinite(part.quantity) && part.quantity > 0) {
+      sum += part.quantity;
+    }
   }
   return sum;
 }
 
 function calculateMatchedQty(
-  requestVector: Map<string, number>,
-  modelVector: Map<string, number>
+  requestCounters: { byName: Map<string, number>; byDesignId: Map<string, number> },
+  modelParts: InputPart[]
 ): number {
   let matchedQty = 0;
-  for (const [key, requiredQty] of modelVector.entries()) {
-    const detectedQty = requestVector.get(key) || 0;
-    matchedQty += Math.min(detectedQty, requiredQty);
+  for (const part of modelParts) {
+    const requiredQty = Number(part.quantity) || 0;
+    if (requiredQty <= 0) {
+      continue;
+    }
+
+    const designQty = part.designId ? requestCounters.byDesignId.get(buildDesignIdKey(part.designId)) || 0 : 0;
+    const nameQty = part.name ? requestCounters.byName.get(buildNameKey(part.name)) || 0 : 0;
+    matchedQty += Math.min(designQty + nameQty, requiredQty);
   }
   return matchedQty;
 }
@@ -645,7 +701,7 @@ function calculateModelCoverageScore(matchedQty: number, modelTotalQty: number):
 }
 
 function calculateMissingParts(
-  requestVector: Map<string, number>,
+  requestCounters: { byName: Map<string, number>; byDesignId: Map<string, number> },
   partsJson: unknown
 ): MissingPart[] {
   if (!Array.isArray(partsJson)) {
@@ -653,28 +709,29 @@ function calculateMissingParts(
   }
 
   const missingParts: MissingPart[] = [];
-  for (const item of partsJson) {
-    if (!item || typeof item !== 'object') {
+  for (const rawItem of partsJson) {
+    if (!rawItem || typeof rawItem !== 'object') {
       continue;
     }
 
-    const part = item as Record<string, unknown>;
-    const name = typeof part.name === 'string' ? part.name.trim() : '';
-    const key = normalizePartKey(name);
-    const requiredQty = Number(part.quantity || 0);
-    if (!key || !Number.isFinite(requiredQty) || requiredQty <= 0) {
+    const item = rawItem as Record<string, unknown>;
+    const name = typeof item.name === 'string' ? item.name.trim() : '';
+    const designId = normalizeDesignId(item.designID);
+    const requiredQty = Number(item.quantity || 0);
+    if (requiredQty <= 0) {
       continue;
     }
 
-    const detectedQty = requestVector.get(key) || 0;
-    const missingQuantity = Math.max(requiredQty - detectedQty, 0);
+    const designQty = designId ? requestCounters.byDesignId.get(buildDesignIdKey(designId)) || 0 : 0;
+    const nameQty = name ? requestCounters.byName.get(buildNameKey(name)) || 0 : 0;
+    const missingQuantity = Math.max(requiredQty - (designQty + nameQty), 0);
     if (missingQuantity <= 0) {
       continue;
     }
 
     missingParts.push({
-      designId: typeof part.designID === 'string' ? part.designID : null,
-      imgUrl: typeof part.imgUrl === 'string' ? part.imgUrl : null,
+      designId: designId || null,
+      imgUrl: typeof item.imgUrl === 'string' ? item.imgUrl : null,
       name: name || null,
       missingQuantity
     });
