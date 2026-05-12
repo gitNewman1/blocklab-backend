@@ -210,16 +210,19 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
 
       const recognizedImageBase64 = extractOutputImageBase64(roboflowRaw);
 
-      // Build imgUrl/designId map from best match model's partsJson
-      const partInfoByName = new Map<string, { imgUrl: string | null; designId: string | null }>();
-      const partInfoByDesignId = new Map<string, { imgUrl: string | null; designId: string | null }>();
+      // Build imgUrl/designId/name map from best match model's partsJson
+      type PartInfo = { imgUrl: string | null; designId: string | null; name: string | null };
+      const partInfoByName = new Map<string, PartInfo>();
+      const partInfoByDesignId = new Map<string, PartInfo>();
       if (matches.length > 0) {
         const bestModel = models.find((m) => m.id === matches[0].id);
         if (bestModel) {
           for (const item of extractPartsWithImgUrl(bestModel.partsJson)) {
-            const info = {
+            const trimmedName = typeof item.name === 'string' ? item.name.trim() : '';
+            const info: PartInfo = {
               imgUrl: item.imgUrl ?? null,
-              designId: item.designId ?? null
+              designId: item.designId ?? null,
+              name: trimmedName || null
             };
             if (item.name) {
               partInfoByName.set(normalizePartKey(item.name), info);
@@ -232,11 +235,13 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
       }
 
       const enrichedRecognizedParts: RecognizedPart[] = recognizedParts.map((p) => {
-        const info =
-          (p.designId ? partInfoByDesignId.get(normalizeDesignId(p.designId)) : undefined) ||
-          partInfoByName.get(normalizePartKey(p.name || ''));
+        const designIdInfo = p.designId ? partInfoByDesignId.get(normalizeDesignId(p.designId)) : undefined;
+        const info = designIdInfo || partInfoByName.get(normalizePartKey(p.name || ''));
+        // 通过 designId 命中时，用模型零件的 name 覆盖识别出的纯数字名称；模型 name 为空则保留原值
+        const name = designIdInfo && designIdInfo.name ? designIdInfo.name : p.name;
         return {
           ...p,
+          name,
           imgUrl: info?.imgUrl ?? null,
           designId: info?.designId ?? null
         };
