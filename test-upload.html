@@ -389,6 +389,19 @@
           <button type="button" id="btnCreateModel">创建</button>
           <div id="createStatus" class="status"></div>
         </div>
+
+        <div class="card" id="assembleAssetsCard">
+          <h3>拼装动画资产 <span class="api-inline">/api/admin/parts/upload · /api/admin/data/backfill-placements</span></h3>
+          <div class="form-group">
+            <label for="partGlbFiles">零件 glb 文件（可多选，文件名须为 designID.glb，例如 3020.glb）</label>
+            <input type="file" id="partGlbFiles" accept=".glb" multiple>
+          </div>
+          <div class="btn-row">
+            <button type="button" id="btnUploadParts">上传零件 glb</button>
+            <button type="button" id="btnBackfillPlacements">回填零件位姿</button>
+          </div>
+          <div id="partsStatus" class="status"></div>
+        </div>
       </section>
 
       <section class="panel">
@@ -500,6 +513,8 @@
     const API_DELETE_MODEL_TYPE_URL = '/api/admin/data/delete-model-type';
     const API_DELETE_USER_URL = '/api/admin/data/delete-user';
     const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/match';
+    const API_UPLOAD_PARTS_URL = '/api/admin/parts/upload';
+    const API_BACKFILL_PLACEMENTS_URL = '/api/admin/data/backfill-placements';
 
     function setStatus(el, type, text) {
       el.className = `status ${type}`;
@@ -1069,6 +1084,59 @@
         setStatus(statusEl, 'error', `请求失败：${error.message}`);
       } finally {
         submitBtn.disabled = false;
+      }
+    });
+
+    document.getElementById('btnUploadParts').addEventListener('click', async () => {
+      const statusEl = document.getElementById('partsStatus');
+      const btn = document.getElementById('btnUploadParts');
+      const input = document.getElementById('partGlbFiles');
+      const startedAt = performance.now();
+      if (!input.files.length) {
+        setStatus(statusEl, 'error', '请先选择至少一个 .glb 文件');
+        return;
+      }
+      btn.disabled = true;
+      setStatus(statusEl, 'loading', `正在上传 ${input.files.length} 个文件...`);
+      try {
+        const formData = new FormData();
+        for (const file of input.files) {
+          formData.append('files', file);
+        }
+        const response = await fetch(API_UPLOAD_PARTS_URL, { method: 'POST', body: formData });
+        const data = await response.json();
+        setJsonOutput(data);
+        if (!response.ok || !data.success) {
+          setStatus(statusEl, 'error', `上传失败：${data.message}\n耗时：${formatElapsed(startedAt)}`);
+        } else {
+          setStatus(statusEl, 'success', `上传成功：保存 ${data.data.count}，跳过 ${data.data.skipped.length}\n耗时：${formatElapsed(startedAt)}`);
+        }
+      } catch (error) {
+        setStatus(statusEl, 'error', `请求失败：${error.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('btnBackfillPlacements').addEventListener('click', async () => {
+      const statusEl = document.getElementById('partsStatus');
+      const btn = document.getElementById('btnBackfillPlacements');
+      const startedAt = performance.now();
+      btn.disabled = true;
+      setStatus(statusEl, 'loading', '正在回填零件位姿...');
+      try {
+        const response = await fetch(API_BACKFILL_PLACEMENTS_URL, { method: 'POST' });
+        const data = await response.json();
+        setJsonOutput(data);
+        if (!response.ok || !data.success) {
+          setStatus(statusEl, 'error', `回填失败：${data.message}\n耗时：${formatElapsed(startedAt)}`);
+        } else {
+          setStatus(statusEl, 'success', `回填完成：更新 ${data.data.updated}，跳过 ${data.data.skipped}，失败 ${data.data.failed}\n耗时：${formatElapsed(startedAt)}`);
+        }
+      } catch (error) {
+        setStatus(statusEl, 'error', `请求失败：${error.message}`);
+      } finally {
+        btn.disabled = false;
       }
     });
 
