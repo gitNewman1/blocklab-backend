@@ -1,7 +1,26 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
+import { config } from '../../config';
 
 const prisma = new PrismaClient();
+
+// 从 partsJson 按 designID 去重，生成每种零件的网格(glb)下载清单，供拼装动画逐零件实例化
+function buildPartMeshes(partsJson: unknown): Array<{ designID: string; meshUrl: string }> {
+  if (!Array.isArray(partsJson)) return [];
+  const seen = new Set<string>();
+  const result: Array<{ designID: string; meshUrl: string }> = [];
+  for (const item of partsJson) {
+    const designID = item && typeof item === 'object' ? (item as Record<string, unknown>).designID : undefined;
+    if (typeof designID === 'string' && designID && !seen.has(designID)) {
+      seen.add(designID);
+      result.push({
+        designID,
+        meshUrl: `${config.storage.publicBaseUrl}/static/parts/${designID}.glb`
+      });
+    }
+  }
+  return result;
+}
 
 export async function modelQueryRoutes(app: FastifyInstance) {
   app.get(
@@ -158,6 +177,16 @@ export async function modelQueryRoutes(app: FastifyInstance) {
                   model3dUrl: { type: 'string' },
                   partsJson: { type: ['array', 'object', 'null'] },
                   stepsJson: { type: ['array', 'object', 'null'] },
+                  partMeshes: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        designID: { type: 'string' },
+                        meshUrl: { type: 'string' }
+                      }
+                    }
+                  },
                   createdAt: { type: 'string', format: 'date-time' },
                   modelTypeId: { type: ['integer', 'null'] },
                   modelTypeName: { type: ['string', 'null'] }
@@ -255,6 +284,7 @@ function toModelResponse<
     createdAt: model.createdAt,
     ...(Object.prototype.hasOwnProperty.call(model, 'partsJson') ? { partsJson: model.partsJson } : {}),
     ...(Object.prototype.hasOwnProperty.call(model, 'stepsJson') ? { stepsJson: model.stepsJson } : {}),
+    ...(Object.prototype.hasOwnProperty.call(model, 'partsJson') ? { partMeshes: buildPartMeshes(model.partsJson) } : {}),
     modelTypeId: model.modelType?.id ?? model.modelTypeId ?? null,
     modelTypeName: model.modelType?.name ?? null
   };

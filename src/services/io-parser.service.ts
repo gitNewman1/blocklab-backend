@@ -1,6 +1,6 @@
 import { parseString } from 'xml2js';
 import AdmZip from 'adm-zip';
-import { ParsedIOFile, Part, Step, UploadedFile } from '../types';
+import { ParsedIOFile, Part, PartPlacement, Matrix3x3, Step, UploadedFile } from '../types';
 
 export class IOParserService {
   async parseIOFileBuffer(buffer: Buffer): Promise<ParsedIOFile> {
@@ -126,6 +126,9 @@ export class IOParserService {
     const partMap = new Map<string, Part>();
     const steps: Step[] = [];
     let currentStepParts: string[] = [];
+    let currentStepPlacements: PartPlacement[] = [];
+    // 累计全部零件实例位姿，供"无 STEP 标记"兜底单步使用
+    const allPlacements: PartPlacement[] = [];
 
     const flushStep = () => {
       if (currentStepParts.length === 0) {
@@ -133,9 +136,11 @@ export class IOParserService {
       }
       steps.push({
         step: steps.length + 1,
-        parts: currentStepParts
+        parts: currentStepParts,
+        placements: currentStepPlacements
       });
       currentStepParts = [];
+      currentStepPlacements = [];
     };
 
     for (const rawLine of lines) {
@@ -176,6 +181,22 @@ export class IOParserService {
       }
 
       currentStepParts.push(key);
+
+      // 提取该零件实例的位姿：tokens[2..4] 为位置，tokens[5..13] 为 3×3 旋转矩阵
+      const x = Number(tokens[2]);
+      const y = Number(tokens[3]);
+      const z = Number(tokens[4]);
+      const matrix = tokens.slice(5, 14).map(Number);
+      if ([x, y, z, ...matrix].every((n) => Number.isFinite(n))) {
+        const placement: PartPlacement = {
+          designID,
+          colorID,
+          position: [x, y, z],
+          rotation: matrix as Matrix3x3
+        };
+        currentStepPlacements.push(placement);
+        allPlacements.push(placement);
+      }
     }
 
     flushStep();
@@ -188,7 +209,8 @@ export class IOParserService {
     if (steps.length === 0) {
       steps.push({
         step: 1,
-        parts: parts.map((part) => part.id)
+        parts: parts.map((part) => part.id),
+        placements: allPlacements
       });
     }
 
@@ -241,7 +263,10 @@ export class IOParserService {
 
       return {
         step: index + 1,
-        parts
+        parts,
+        // LXFML 的位姿在 Brick/Bone 的 transformation 字段，结构与 LDraw 不同，
+        // 本期拼装动画仅支持 LDraw（model.ldr）分支，此处位姿后置补充
+        placements: []
       };
     });
   }
