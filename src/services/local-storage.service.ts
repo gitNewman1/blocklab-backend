@@ -49,6 +49,11 @@ export class LocalStorageService {
     );
   }
 
+  // 把对外 URL（如 ioFileUrl）映射为本地绝对路径，供 backfill 读取已存文件
+  resolveUrlToAbsolutePath(url: string | null | undefined): string | null {
+    return this.resolvePublicUrlToAbsolutePath(url);
+  }
+
   private ensureBaseFolders(): void {
     const folders = ['io-files', 'models-3d', 'thumbnails', 'manuals', 'posts', 'recognition-images'];
     for (const folder of folders) {

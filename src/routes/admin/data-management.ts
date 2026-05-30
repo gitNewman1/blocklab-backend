@@ -1,10 +1,22 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
+import fs from 'fs';
 import { LocalStorageService } from '../../services/local-storage.service';
+import { IOParserService } from '../../services/io-parser.service';
 
 const prisma = new PrismaClient();
 const storageService = new LocalStorageService();
+const ioParserService = new IOParserService();
 const modelAssetFolders = ['io-files', 'models-3d', 'thumbnails', 'manuals'];
+
+// 判断模型的 stepsJson 是否已含每零件位姿（新格式）。老格式的 step 没有 placements 字段。
+function hasPlacements(stepsJson: unknown): boolean {
+  return (
+    Array.isArray(stepsJson) &&
+    stepsJson.length > 0 &&
+    stepsJson.every((s) => s && typeof s === 'object' && Array.isArray((s as Record<string, unknown>).placements))
+  );
+}
 
 export async function dataManagementRoutes(app: FastifyInstance) {
   app.post('/clear-models', async (request, reply) => {
@@ -278,4 +290,102 @@ export async function dataManagementRoutes(app: FastifyInstance) {
       });
     }
   });
+
+  app.post(
+    '/backfill-placements',
+    {
+      schema: {
+        tags: ['Admin Data'],
+        summary: '回填零件位姿（重新解析已存 .io，原地更新 stepsJson）',
+        description:
+          '幂等接口：默认只处理 stepsJson 缺少 placements 的老模型，已补过的跳过；force=true 时强制重新解析所有模型。依赖服务器 uploads/io-files/ 下的原始 .io 文件仍存在。仅更新 stepsJson，不动 partsJson（保留零件名称/图片等富化数据）。',
+        querystring: {
+          type: 'object',
+          properties: {
+            force: { type: 'boolean', default: false, description: '为 true 时强制重新解析所有模型' }
+          }
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              data: {
+                type: 'object',
+                properties: {
+                  total: { type: 'integer', description: '模型总数' },
+                  updated: { type: 'integer', description: '本次重新解析并更新的模型数' },
+                  skipped: { type: 'integer', description: '已有 placements 被跳过的模型数' },
+                  failed: { type: 'integer', description: '解析失败/找不到 .io 的模型数' },
+                  failedIds: { type: 'array', items: { type: 'integer' } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    async (request, reply) => {
+      try {
+        const { force } = request.query as { force?: boolean };
+        const forceAll = force === true;
+
+        const models = await prisma.model.findMany({
+          select: { id: true, ioFileUrl: true, stepsJson: true }
+        });
+
+        let updated = 0;
+        let skipped = 0;
+        const failedIds: number[] = [];
+
+        for (const model of models) {
+          if (!forceAll && hasPlacements(model.stepsJson)) {
+            skipped += 1;
+            continue;
+          }
+          try {
+            const absPath = storageService.resolveUrlToAbsolutePath(model.ioFileUrl);
+            if (!absPath || !fs.existsSync(absPath)) {
+              failedIds.push(model.id);
+              request.log.warn(
+                { modelId: model.id, ioFileUrl: model.ioFileUrl },
+                'Backfill: .io 文件在本地未找到'
+              );
+              continue;
+            }
+            const buffer = await fs.promises.readFile(absPath);
+            const parsed = await ioParserService.parseIOFileBuffer(buffer);
+            await prisma.model.update({
+              where: { id: model.id },
+              data: { stepsJson: parsed.steps as any }
+            });
+            updated += 1;
+          } catch (err: any) {
+            failedIds.push(model.id);
+            request.log.error({ modelId: model.id, error: err?.message }, 'Backfill: 重新解析失败');
+          }
+        }
+
+        return reply.send({
+          success: true,
+          message: `回填完成：更新 ${updated}，跳过 ${skipped}，失败 ${failedIds.length}`,
+          data: {
+            total: models.length,
+            updated,
+            skipped,
+            failed: failedIds.length,
+            failedIds
+          }
+        });
+      } catch (error: any) {
+        request.log.error({ error: error.message, stack: error.stack }, 'Backfill placements failed');
+        return reply.code(500).send({
+          success: false,
+          message: error.message,
+          error: 'INTERNAL_ERROR'
+        });
+      }
+    }
+  );
 }

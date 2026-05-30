@@ -16,7 +16,8 @@ export async function registerSwagger(app: FastifyInstance) {
         { name: 'Auth', description: '登录与用户相关接口' },
         { name: 'Recognition', description: '识别匹配相关接口' },
         { name: 'Works', description: '作品相关接口' },
-        { name: 'Recommended Models', description: '推荐模型相关接口' }
+        { name: 'Recommended Models', description: '推荐模型相关接口' },
+        { name: 'Admin Data', description: '后台数据管理与维护接口' }
       ]
     }
   });
