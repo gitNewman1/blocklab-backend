@@ -6,6 +6,7 @@ import path from 'path';
 import { modelsRoutes } from './routes/admin/models';
 import { recommendedModelsRoutes } from './routes/admin/recommended-models';
 import { dataManagementRoutes } from './routes/admin/data-management';
+import { partsRoutes } from './routes/admin/parts';
 import { adminModelTypeRoutes } from './routes/admin/model-types';
 import { recognitionMatchRoutes } from './routes/recognition/match';
 import { recognitionImageMatchRoutes } from './routes/recognition/image-match';
@@ -41,6 +42,7 @@ export async function buildApp() {
   await app.register(modelsRoutes, { prefix: '/api/admin/models' });
   await app.register(recommendedModelsRoutes, { prefix: '/api/admin/recommended-models' });
   await app.register(dataManagementRoutes, { prefix: '/api/admin/data' });
+  await app.register(partsRoutes, { prefix: '/api/admin/parts' });
   await app.register(adminModelTypeRoutes, { prefix: '/api/admin/model-types' });
   await app.register(recognitionMatchRoutes, { prefix: '/api/recognition' });
   await app.register(recognitionImageMatchRoutes, { prefix: '/api/recognition' });
