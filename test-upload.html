@@ -390,6 +390,42 @@
           <div id="createStatus" class="status"></div>
         </div>
 
+        <div class="card" id="assemblyGenerateCard">
+          <h3>本地生成 assembly glb <span class="api-inline">http://127.0.0.1:5177/api/generate-assembly</span></h3>
+          <div class="api-row">
+            <div class="form-group">
+              <label for="assemblyLocalServer">本地生成服务</label>
+              <input type="text" id="assemblyLocalServer" value="http://127.0.0.1:5177">
+            </div>
+            <div class="btn-row">
+              <button type="button" id="btnCheckAssemblyGenerator">检测环境</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="assemblyIoFile">模型 .io 文件</label>
+            <input type="file" id="assemblyIoFile" accept=".io">
+          </div>
+          <div class="api-row">
+            <div class="form-group">
+              <label for="assemblyModelId">模型 ID</label>
+              <input type="number" id="assemblyModelId" min="1" placeholder="例如：27">
+            </div>
+            <div class="form-group">
+              <label for="assemblyUploadServer">上传服务器</label>
+              <input type="text" id="assemblyUploadServer" value="http://121.37.160.39:3000">
+            </div>
+          </div>
+          <label class="inline-check">
+            <input type="checkbox" id="assemblyUploadAfterGenerate" checked>
+            生成后上传到服务器 /static/parts/assembly_{模型ID}.glb
+          </label>
+          <div class="btn-row">
+            <button type="button" id="btnGenerateAssembly">生成 assembly glb</button>
+          </div>
+          <div class="field-hint">使用前请在其他电脑本机启动 tools\ldraw\generator-server：npm install 后 npm start。浏览器只负责选文件，真正生成由本地服务调用 Blender 完成。</div>
+          <div id="assemblyGenerateStatus" class="status"></div>
+        </div>
+
         <div class="card" id="assembleAssetsCard">
           <h3>拼装动画资产 <span class="api-inline">/api/admin/parts/upload · /api/admin/data/backfill-placements</span></h3>
           <div class="form-group">
@@ -522,6 +558,10 @@
     const API_UPLOAD_PARTS_URL = '/api/admin/parts/upload';
     const API_BACKFILL_PLACEMENTS_URL = '/api/admin/data/backfill-placements';
 
+    function getAssemblyGeneratorBaseUrl() {
+      return document.getElementById('assemblyLocalServer').value.replace(/\/+$/, '');
+    }
+
     function setStatus(el, type, text) {
       el.className = `status ${type}`;
       el.style.display = 'block';
@@ -572,6 +612,13 @@
     function formatElapsed(startedAt) {
       const elapsedMs = Math.max(0, performance.now() - startedAt);
       return `${elapsedMs.toFixed(0)} ms`;
+    }
+
+    function formatBytes(bytes) {
+      const value = Number(bytes) || 0;
+      if (value < 1024) return `${value} B`;
+      if (value < 1024 * 1024) return `${(value / 1024).toFixed(0)} KB`;
+      return `${(value / 1024 / 1024).toFixed(2)} MB`;
     }
 
     function setModelTypeHint(text) {
@@ -1124,6 +1171,96 @@
         }
       } catch (error) {
         setStatus(statusEl, 'error', `请求失败：${error.message}`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('btnCheckAssemblyGenerator').addEventListener('click', async () => {
+      const statusEl = document.getElementById('assemblyGenerateStatus');
+      const btn = document.getElementById('btnCheckAssemblyGenerator');
+      const startedAt = performance.now();
+      btn.disabled = true;
+      setStatus(statusEl, 'loading', '正在检测本地生成环境...');
+      try {
+        const response = await fetch(`${getAssemblyGeneratorBaseUrl()}/api/env-check`);
+        const data = await response.json();
+        setJsonOutput(data);
+        if (!response.ok || !data.success) {
+          setStatus(statusEl, 'error', `检测失败：${data.message || response.statusText}\n耗时：${formatElapsed(startedAt)}`);
+          return;
+        }
+        const env = data.data;
+        const missing = [];
+        if (!env.blenderFound) missing.push('Blender');
+        if (!env.makeScriptFound) missing.push('make_assembly.ps1');
+        if (!env.buildScriptFound) missing.push('build_assembly.py');
+        if (!env.ldrawLibraryFound) missing.push('library');
+        if (!env.importLDrawFound) missing.push('ImportLDraw');
+        const summary = [
+          `工具目录：${env.toolRoot}`,
+          `Blender：${env.blenderFound ? '已找到' : '未找到'} (${env.blenderPath})`,
+          `LDraw library：${env.ldrawLibraryFound ? '已找到' : '未找到'}`,
+          `ImportLDraw：${env.importLDrawFound ? '已找到' : '未找到'}`,
+          `输出目录：${env.outDir}`,
+          `耗时：${formatElapsed(startedAt)}`
+        ].join('\n');
+        setStatus(statusEl, missing.length ? 'error' : 'success', missing.length ? `${summary}\n缺少：${missing.join('、')}` : summary);
+      } catch (error) {
+        setStatus(statusEl, 'error', `请求失败：${error.message}\n请确认本机已启动 tools\\ldraw\\generator-server`);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('btnGenerateAssembly').addEventListener('click', async () => {
+      const statusEl = document.getElementById('assemblyGenerateStatus');
+      const btn = document.getElementById('btnGenerateAssembly');
+      const ioInput = document.getElementById('assemblyIoFile');
+      const modelId = document.getElementById('assemblyModelId').value.trim();
+      const uploadServer = document.getElementById('assemblyUploadServer').value.trim();
+      const upload = document.getElementById('assemblyUploadAfterGenerate').checked;
+      const startedAt = performance.now();
+
+      if (!ioInput.files.length) {
+        setStatus(statusEl, 'error', '请先选择模型 .io 文件');
+        return;
+      }
+      if (!modelId || Number(modelId) <= 0) {
+        setStatus(statusEl, 'error', '请填写正确的模型 ID');
+        return;
+      }
+
+      btn.disabled = true;
+      setStatus(statusEl, 'loading', upload ? '正在生成并上传 assembly glb...' : '正在生成 assembly glb...');
+      try {
+        const formData = new FormData();
+        formData.append('io_file', ioInput.files[0]);
+        formData.append('id', modelId);
+        formData.append('server', uploadServer);
+        formData.append('upload', upload ? 'true' : 'false');
+
+        const response = await fetch(`${getAssemblyGeneratorBaseUrl()}/api/generate-assembly`, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await response.json();
+        setJsonOutput(data);
+        if (!response.ok || !data.success) {
+          setStatus(statusEl, 'error', `生成失败：${data.message}\n${data.data?.stderr || data.data?.stdout || ''}\n耗时：${formatElapsed(startedAt)}`);
+          return;
+        }
+        const result = data.data;
+        setStatus(statusEl, 'success', [
+          data.message,
+          `文件：${result.glbPath}`,
+          `大小：${formatBytes(result.fileSize)}`,
+          `节点/网格/材质：${result.nodeCount}/${result.meshCount}/${result.materialCount}`,
+          result.uploaded ? `服务器：${result.url}` : '未上传服务器',
+          `耗时：${formatElapsed(startedAt)}`
+        ].join('\n'));
+      } catch (error) {
+        setStatus(statusEl, 'error', `请求失败：${error.message}\n请确认本机已启动 tools\\ldraw\\generator-server`);
       } finally {
         btn.disabled = false;
       }
