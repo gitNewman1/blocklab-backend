@@ -393,11 +393,17 @@
         <div class="card" id="assembleAssetsCard">
           <h3>拼装动画资产 <span class="api-inline">/api/admin/parts/upload · /api/admin/data/backfill-placements</span></h3>
           <div class="form-group">
-            <label for="partGlbFiles">零件 glb 文件（可多选，文件名须为 designID.glb，例如 3020.glb）</label>
+            <label for="partGlbFiles">assembly glb 文件（可多选，文件名须为 assembly_{模型ID}.glb，例如 assembly_27.glb）</label>
             <input type="file" id="partGlbFiles" accept=".glb" multiple>
+            <div class="field-hint">单选/多选文件时，请从 D:\ClaudeCode\BlockLab\tools\ldraw\models_glb 目录选择。</div>
+          </div>
+          <div class="form-group">
+            <label for="partGlbDirectory">或选择 models_glb 目录批量上传</label>
+            <input type="file" id="partGlbDirectory" webkitdirectory directory multiple>
+            <div class="field-hint">选择 D:\ClaudeCode\BlockLab\tools\ldraw\models_glb 后，页面会自动过滤并上传其中所有 .glb 文件。</div>
           </div>
           <div class="btn-row">
-            <button type="button" id="btnUploadParts">上传零件 glb</button>
+            <button type="button" id="btnUploadParts">上传 assembly glb</button>
             <button type="button" id="btnBackfillPlacements">回填零件位姿</button>
           </div>
           <div id="partsStatus" class="status"></div>
@@ -1090,17 +1096,22 @@
     document.getElementById('btnUploadParts').addEventListener('click', async () => {
       const statusEl = document.getElementById('partsStatus');
       const btn = document.getElementById('btnUploadParts');
-      const input = document.getElementById('partGlbFiles');
+      const fileInput = document.getElementById('partGlbFiles');
+      const dirInput = document.getElementById('partGlbDirectory');
+      const glbFiles = [
+        ...Array.from(fileInput.files || []),
+        ...Array.from(dirInput.files || []).filter(file => /\.glb$/i.test(file.name))
+      ];
       const startedAt = performance.now();
-      if (!input.files.length) {
-        setStatus(statusEl, 'error', '请先选择至少一个 .glb 文件');
+      if (!glbFiles.length) {
+        setStatus(statusEl, 'error', '请先从 tools\\ldraw\\models_glb 选择至少一个 .glb 文件，或选择整个 models_glb 目录');
         return;
       }
       btn.disabled = true;
-      setStatus(statusEl, 'loading', `正在上传 ${input.files.length} 个文件...`);
+      setStatus(statusEl, 'loading', `正在上传 ${glbFiles.length} 个 .glb 文件...`);
       try {
         const formData = new FormData();
-        for (const file of input.files) {
+        for (const file of glbFiles) {
           formData.append('files', file);
         }
         const response = await fetch(API_UPLOAD_PARTS_URL, { method: 'POST', body: formData });
