@@ -4,3 +4,9 @@ uploads/
 .env
 *.log
 .DS_Store
+
+# Python cache / model artifacts
+__pycache__/
+*.pyc
+inference_service/best.pt
+inference_service/__pycache__/

@@ -11,6 +11,8 @@ import { adminModelTypeRoutes } from './routes/admin/model-types';
 import { recognitionMatchRoutes } from './routes/recognition/match';
 import { recognitionImageMatchRoutes } from './routes/recognition/image-match';
 import { modelQueryRoutes } from './routes/models';
+import { inferenceModelRoutes } from './routes/admin/inference-model';
+import { uploadRoutes } from './routes/admin/upload';
 import { authRoutes } from './routes/auth/login';
 import { workRoutes } from './routes/works';
 import { userRoutes } from './routes/users';
@@ -28,6 +30,12 @@ export async function buildApp() {
     root: path.join(__dirname, '..', 'public'),
     prefix: '/'
   });
+  await app.register(staticFiles, {
+    root: path.join(__dirname, '..', 'guide'),
+    prefix: '/guide/',
+    index: ['index.html'],
+    decorateReply: false
+  });
   await app.register(multipart, {
     limits: {
       fileSize: config.storage.maxFileSizeMb * 1024 * 1024
@@ -44,6 +52,8 @@ export async function buildApp() {
   await app.register(dataManagementRoutes, { prefix: '/api/admin/data' });
   await app.register(partsRoutes, { prefix: '/api/admin/parts' });
   await app.register(adminModelTypeRoutes, { prefix: '/api/admin/model-types' });
+  await app.register(inferenceModelRoutes, { prefix: '/api/admin' });
+  await app.register(uploadRoutes, { prefix: '/api/admin' });
   await app.register(recognitionMatchRoutes, { prefix: '/api/recognition' });
   await app.register(recognitionImageMatchRoutes, { prefix: '/api/recognition' });
   await app.register(modelQueryRoutes, { prefix: '/api/models' });

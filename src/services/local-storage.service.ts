@@ -55,7 +55,7 @@ export class LocalStorageService {
   }
 
   private ensureBaseFolders(): void {
-    const folders = ['io-files', 'models-3d', 'thumbnails', 'manuals', 'posts', 'recognition-images'];
+    const folders = ['io-files', 'models-3d', 'thumbnails', 'manuals', 'posts', 'recognition-images', 'images', 'files'];
     for (const folder of folders) {
       fs.mkdirSync(path.join(config.storage.uploadRoot, folder), { recursive: true });
     }

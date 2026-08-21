@@ -56,6 +56,7 @@
       <div class="nav-item" data-section="recommended">推荐商品</div>
       <div class="nav-item" data-section="works">作品管理</div>
       <div class="nav-item" data-section="users">用户管理</div>
+      <div class="nav-item" data-section="inference-model">推理模型</div>
     </div>
     <div class="main">
       <div id="models-section" class="section active">
@@ -99,6 +100,26 @@
         </div>
         <div class="card">
           <div id="users-list" class="loading">加载中...</div>
+        </div>
+      </div>
+
+      <!-- 推理模型管理 -->
+      <div id="inference-model-section" class="section">
+        <div class="header">
+          <h2>推理模型管理</h2>
+          <button class="btn btn-primary" onclick="showUploadModel()">上传 .pt 模型</button>
+        </div>
+        <div class="card">
+          <h3 style="margin-bottom:16px;">当前模型状态</h3>
+          <div id="inference-model-info" class="loading">加载中...</div>
+        </div>
+        <div class="card">
+          <h3 style="margin-bottom:16px;">使用说明</h3>
+          <ol style="line-height:2;color:#555;">
+            <li>上传 <code>.pt</code> 格式的 YOLO 训练模型文件</li>
+            <li>上传后替换 <code>inference_service/best.pt</code>，需<strong>重启推理服务</strong>才能生效</li>
+            <li>重启命令：<code>pm2 restart blocklab-inference</code> 或 <code>docker restart &lt;容器名&gt;</code></li>
+          </ol>
         </div>
       </div>
     </div>
@@ -199,6 +220,27 @@
     </div>
   </div>
 
+  <!-- Modal: 上传推理模型 -->
+  <div id="inference-model-modal" class="modal">
+    <div class="modal-content">
+      <h3>上传推理模型 (.pt)</h3>
+      <div class="form-group">
+        <label>选择模型文件 (.pt) *</label>
+        <input type="file" id="inference-model-file" accept=".pt">
+        <p style="color:#888;font-size:12px;margin-top:4px;">上传后替换 inference_service/best.pt，重启推理服务生效</p>
+      </div>
+      <div id="inference-upload-progress" style="display:none;">
+        <div style="background:#ecf0f1;border-radius:4px;height:20px;overflow:hidden;">
+          <div id="inference-upload-bar" style="width:0%;height:100%;background:#3498db;transition:width 0.3s;"></div>
+        </div>
+        <p id="inference-upload-status" style="text-align:center;margin-top:8px;color:#888;font-size:13px;">上传中...</p>
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('inference-model-modal')">取消</button>
+        <button class="btn btn-primary" onclick="submitInferenceModel()">上传</button>
+      </div>
+    </div>
+  </div>
   <script>
     const API = '';
 
@@ -220,6 +262,7 @@
       else if (section === 'recommended') loadRecommended();
       else if (section === 'works') loadWorks();
       else if (section === 'users') loadUsers();
+      else if (section === 'inference-model') loadInferenceModel();
     }
 
     function closeModal(id) {
@@ -443,6 +486,114 @@
     // ---- Users ----
     async function loadUsers() {
       document.getElementById('users-list').innerHTML = '<div class="empty">请通过用户ID查询</div>';
+    }
+
+    // ---- Inference Model ----
+    async function loadInferenceModel() {
+      const el = document.getElementById('inference-model-info');
+      el.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const res = await fetch(API + '/api/admin/inference-model/info');
+        const json = await res.json();
+        const data = json.data;
+        if (!data || !data.exists) {
+          el.innerHTML = `<div class="empty">
+            <p style="font-size:48px;margin-bottom:12px;">📦</p>
+            <p>尚未上传推理模型</p>
+            <p style="color:#888;font-size:13px;margin-top:8px;">请点击右上角「上传 .pt 模型」按钮上传</p>
+          </div>`;
+          return;
+        }
+        el.innerHTML = `<table class="table">
+          <thead><tr><th>属性</th><th>值</th></tr></thead>
+          <tbody>
+            <tr><td>文件名</td><td><code>${data.fileName}</code></td></tr>
+            <tr><td>文件大小</td><td>${data.fileSizeMb} MB</td></tr>
+            <tr><td>上传时间</td><td>${new Date(data.modifiedAt).toLocaleString()}</td></tr>
+            <tr><td>服务状态</td>
+              <td><span id="inference-service-status" class="badge badge-warning">检测中...</span></td>
+            </tr>
+          </tbody>
+        </table>`;
+        // 检测推理服务是否在线
+        checkInferenceService();
+      } catch(e) {
+        el.innerHTML = '<div class="empty">加载失败</div>';
+      }
+    }
+
+    async function checkInferenceService() {
+      const el = document.getElementById('inference-service-status');
+      try {
+        const res = await fetch(API + '/api/admin/inference-model/ping', { signal: AbortSignal.timeout(3000) });
+        const json = await res.json();
+        if (json.success) {
+          el.className = 'badge badge-success';
+          el.textContent = `在线 (${json.data.device})`;
+        } else {
+          el.className = 'badge badge-warning';
+          el.textContent = json.message || '异常';
+        }
+      } catch {
+        el.className = 'badge badge-danger';
+        el.textContent = '推理服务未启动';
+      }
+    }
+
+    function showUploadModel() {
+      document.getElementById('inference-model-file').value = '';
+      document.getElementById('inference-upload-progress').style.display = 'none';
+      document.getElementById('inference-model-modal').classList.add('show');
+    }
+
+    async function submitInferenceModel() {
+      const fileInput = document.getElementById('inference-model-file');
+      const file = fileInput.files[0];
+      if (!file) return alert('请选择 .pt 模型文件');
+      if (!file.name.endsWith('.pt')) return alert('只支持 .pt 格式');
+      if (file.size > 500 * 1024 * 1024) return alert('文件超过 500MB 限制');
+
+      const progressEl = document.getElementById('inference-upload-progress');
+      const barEl = document.getElementById('inference-upload-bar');
+      const statusEl = document.getElementById('inference-upload-status');
+      progressEl.style.display = 'block';
+      barEl.style.width = '0%';
+      statusEl.textContent = '上传中...';
+
+      const fd = new FormData();
+      fd.append('model_file', file);
+
+      try {
+        // 使用 XMLHttpRequest 以支持上传进度
+        const result = await new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', API + '/api/admin/inference-model/upload');
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const pct = Math.round((e.loaded / e.total) * 100);
+              barEl.style.width = pct + '%';
+              statusEl.textContent = `上传中 ${pct}% (${(e.loaded / 1024 / 1024).toFixed(1)}MB)`;
+            }
+          };
+          xhr.onload = () => {
+            try { resolve(JSON.parse(xhr.responseText)); }
+            catch { reject(new Error('解析响应失败')); }
+          };
+          xhr.onerror = () => reject(new Error('网络错误'));
+          xhr.send(fd);
+        });
+
+        if (!result.success) return alert(result.message || '上传失败');
+        barEl.style.width = '100%';
+        statusEl.textContent = '上传完成 ✓';
+        setTimeout(() => {
+          closeModal('inference-model-modal');
+          loadInferenceModel();
+        }, 800);
+      } catch(e) {
+        statusEl.textContent = '上传失败';
+        alert('上传失败: ' + e.message);
+      }
     }
 
     // Init

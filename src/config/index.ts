@@ -31,6 +31,10 @@ export const config = {
     workflowUrl: process.env.ROBOFLOW_WORKFLOW_URL || '',
     timeoutMs: Number.isFinite(parsedRoboflowTimeoutMs) ? parsedRoboflowTimeoutMs : 15000
   },
+  inference: {
+    serviceUrl: process.env.INFERENCE_SERVICE_URL || '',
+    timeoutMs: Number.isFinite(parsedRoboflowTimeoutMs) ? parsedRoboflowTimeoutMs : 15000
+  },
   hunyuan3d: {
     secretId: process.env.HUNYUAN3D_SECRET_ID || '',
     secretKey: process.env.HUNYUAN3D_SECRET_KEY || '',
