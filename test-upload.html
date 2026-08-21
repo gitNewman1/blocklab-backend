@@ -320,12 +320,6 @@
             <label for="manualFile">安装说明书（可选）</label>
             <input type="file" id="manualFile" name="manual_file" accept=".pdf,application/pdf">
           </div>
-
-          <label class="checkbox-line">
-            <input type="checkbox" id="autoGenerateAssembly" checked>
-            上传成功后自动调用本地服务生成并上传 assembly_{模型ID}.glb
-          </label>
-
           <button type="submit" id="uploadSubmitBtn">上传</button>
           <div id="uploadStatus" class="status"></div>
         </form>
@@ -394,9 +388,8 @@
           <button type="button" id="btnCreateModel">创建</button>
           <div id="createStatus" class="status"></div>
         </div>
-
         <div class="card" id="assemblyGenerateCard">
-          <h3>本地生成 assembly glb <span class="api-inline">http://127.0.0.1:5177/api/generate-assembly</span></h3>
+          <h3>本地生成环境检测 <span class="api-inline">http://127.0.0.1:5177/api/env-check</span></h3>
           <div class="api-row">
             <div class="form-group">
               <label for="assemblyLocalServer">本地生成服务</label>
@@ -406,48 +399,8 @@
               <button type="button" id="btnCheckAssemblyGenerator">检测环境</button>
             </div>
           </div>
-          <div class="form-group">
-            <label for="assemblyIoFile">模型 .io 文件</label>
-            <input type="file" id="assemblyIoFile" accept=".io">
-          </div>
-          <div class="api-row">
-            <div class="form-group">
-              <label for="assemblyModelId">模型 ID</label>
-              <input type="number" id="assemblyModelId" min="1" placeholder="例如：27">
-            </div>
-            <div class="form-group">
-              <label for="assemblyUploadServer">上传服务器</label>
-              <input type="text" id="assemblyUploadServer" value="http://121.37.160.39:3000">
-            </div>
-          </div>
-          <label class="inline-check">
-            <input type="checkbox" id="assemblyUploadAfterGenerate" checked>
-            生成后上传到服务器 /static/parts/assembly_{模型ID}.glb
-          </label>
-          <div class="btn-row">
-            <button type="button" id="btnGenerateAssembly">生成 assembly glb</button>
-          </div>
-          <div class="field-hint">使用前请在其他电脑本机启动 tools\ldraw\generator-server：npm install 后 npm start。浏览器只负责选文件，真正生成由本地服务调用 Blender 完成。</div>
+          <div class="field-hint">上传模型时会自动调用该本地服务生成并上传 assembly_{模型ID}.glb；这里仅用于提前确认 Blender、LDraw 和 generator-server 是否可用。</div>
           <div id="assemblyGenerateStatus" class="status"></div>
-        </div>
-
-        <div class="card" id="assembleAssetsCard">
-          <h3>拼装动画资产 <span class="api-inline">/api/admin/parts/upload · /api/admin/data/backfill-placements</span></h3>
-          <div class="form-group">
-            <label for="partGlbFiles">assembly glb 文件（可多选，文件名须为 assembly_{模型ID}.glb，例如 assembly_27.glb）</label>
-            <input type="file" id="partGlbFiles" accept=".glb" multiple>
-            <div class="field-hint">单选/多选文件时，请从 D:\ClaudeCode\BlockLab\tools\ldraw\models_glb 目录选择。</div>
-          </div>
-          <div class="form-group">
-            <label for="partGlbDirectory">或选择 models_glb 目录批量上传</label>
-            <input type="file" id="partGlbDirectory" webkitdirectory directory multiple>
-            <div class="field-hint">选择 D:\ClaudeCode\BlockLab\tools\ldraw\models_glb 后，页面会自动过滤并上传其中所有 .glb 文件。</div>
-          </div>
-          <div class="btn-row">
-            <button type="button" id="btnUploadParts">上传 assembly glb</button>
-            <button type="button" id="btnBackfillPlacements">回填零件位姿</button>
-          </div>
-          <div id="partsStatus" class="status"></div>
         </div>
       </section>
 
@@ -560,8 +513,7 @@
     const API_DELETE_MODEL_TYPE_URL = '/api/admin/data/delete-model-type';
     const API_DELETE_USER_URL = '/api/admin/data/delete-user';
     const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/match';
-    const API_UPLOAD_PARTS_URL = '/api/admin/parts/upload';
-    const API_BACKFILL_PLACEMENTS_URL = '/api/admin/data/backfill-placements';
+    const DEFAULT_ASSEMBLY_UPLOAD_SERVER = 'http://121.37.160.39:3000';
 
     function getAssemblyGeneratorBaseUrl() {
       return document.getElementById('assemblyLocalServer').value.replace(/\/+$/, '');
@@ -794,7 +746,6 @@
       const statusEl = document.getElementById('uploadStatus');
       const submitBtn = document.getElementById('uploadSubmitBtn');
       const ioInput = document.getElementById('ioFile');
-      const autoGenerate = document.getElementById('autoGenerateAssembly').checked;
       const startedAt = performance.now();
 
       submitBtn.disabled = true;
@@ -811,37 +762,31 @@
           `说明书地址：${model.manualUrl || '无'}`
         ];
 
-        document.getElementById('assemblyModelId').value = model.id;
-        if (ioInput.files[0]) {
-          const transfer = new DataTransfer();
-          transfer.items.add(ioInput.files[0]);
-          document.getElementById('assemblyIoFile').files = transfer.files;
-        }
-
-        if (autoGenerate) {
-          setStatus(statusEl, 'loading', `${lines.join('\n')}\n\n正在生成并上传 assembly_${model.id}.glb...`);
+        setStatus(statusEl, 'loading', `${lines.join('\n')}\n\n正在生成并上传 assembly_${model.id}.glb...`);
+        try {
           const assemblyData = await generateAssemblyFromIoFile({
             ioFile: ioInput.files[0],
             modelId: model.id,
-            uploadServer: document.getElementById('assemblyUploadServer').value.trim(),
+            uploadServer: DEFAULT_ASSEMBLY_UPLOAD_SERVER,
             upload: true
           });
           const result = assemblyData.data;
           lines.push(`assembly：${result.uploaded ? result.url : result.glbPath}`);
           lines.push(`assembly 大小：${formatBytes(result.fileSize)}`);
-        } else {
-          lines.push('assembly：已跳过自动生成，可在下方手动生成');
+          lines.push(`调用耗时：${formatElapsed(startedAt)}`);
+          setStatus(statusEl, 'success', lines.join('\n'));
+        } catch (assemblyError) {
+          lines.push(`assembly 生成失败：${assemblyError.message}`);
+          lines.push('模型记录已上传成功，请先点击“检测环境”确认本地生成服务可用后重新上传模型。');
+          lines.push(`调用耗时：${formatElapsed(startedAt)}`);
+          setStatus(statusEl, 'error', lines.join('\n'));
         }
-
-        lines.push(`调用耗时：${formatElapsed(startedAt)}`);
-        setStatus(statusEl, 'success', lines.join('\n'));
       } catch (error) {
         setStatus(statusEl, 'error', `上传失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
       } finally {
         submitBtn.disabled = false;
       }
     });
-
     document.getElementById('btnCreateModelType').addEventListener('click', async () => {
       const statusEl = document.getElementById('createModelTypeStatus');
       const name = document.getElementById('createModelTypeName').value.trim();
@@ -1203,42 +1148,6 @@
       }
     });
 
-    document.getElementById('btnUploadParts').addEventListener('click', async () => {
-      const statusEl = document.getElementById('partsStatus');
-      const btn = document.getElementById('btnUploadParts');
-      const fileInput = document.getElementById('partGlbFiles');
-      const dirInput = document.getElementById('partGlbDirectory');
-      const glbFiles = [
-        ...Array.from(fileInput.files || []),
-        ...Array.from(dirInput.files || []).filter(file => /\.glb$/i.test(file.name))
-      ];
-      const startedAt = performance.now();
-      if (!glbFiles.length) {
-        setStatus(statusEl, 'error', '请先从 tools\\ldraw\\models_glb 选择至少一个 .glb 文件，或选择整个 models_glb 目录');
-        return;
-      }
-      btn.disabled = true;
-      setStatus(statusEl, 'loading', `正在上传 ${glbFiles.length} 个 .glb 文件...`);
-      try {
-        const formData = new FormData();
-        for (const file of glbFiles) {
-          formData.append('files', file);
-        }
-        const response = await fetch(API_UPLOAD_PARTS_URL, { method: 'POST', body: formData });
-        const data = await response.json();
-        setJsonOutput(data);
-        if (!response.ok || !data.success) {
-          setStatus(statusEl, 'error', `上传失败：${data.message}\n耗时：${formatElapsed(startedAt)}`);
-        } else {
-          setStatus(statusEl, 'success', `上传成功：保存 ${data.data.count}，跳过 ${data.data.skipped.length}\n耗时：${formatElapsed(startedAt)}`);
-        }
-      } catch (error) {
-        setStatus(statusEl, 'error', `请求失败：${error.message}`);
-      } finally {
-        btn.disabled = false;
-      }
-    });
-
     document.getElementById('btnCheckAssemblyGenerator').addEventListener('click', async () => {
       const statusEl = document.getElementById('assemblyGenerateStatus');
       const btn = document.getElementById('btnCheckAssemblyGenerator');
@@ -1271,71 +1180,6 @@
         setStatus(statusEl, missing.length ? 'error' : 'success', missing.length ? `${summary}\n缺少：${missing.join('、')}` : summary);
       } catch (error) {
         setStatus(statusEl, 'error', `请求失败：${error.message}\n请确认本机已启动 tools\\ldraw\\generator-server`);
-      } finally {
-        btn.disabled = false;
-      }
-    });
-
-    document.getElementById('btnGenerateAssembly').addEventListener('click', async () => {
-      const statusEl = document.getElementById('assemblyGenerateStatus');
-      const btn = document.getElementById('btnGenerateAssembly');
-      const ioInput = document.getElementById('assemblyIoFile');
-      const modelId = document.getElementById('assemblyModelId').value.trim();
-      const uploadServer = document.getElementById('assemblyUploadServer').value.trim();
-      const upload = document.getElementById('assemblyUploadAfterGenerate').checked;
-      const startedAt = performance.now();
-
-      if (!ioInput.files.length) {
-        setStatus(statusEl, 'error', '请先选择模型 .io 文件');
-        return;
-      }
-      if (!modelId || Number(modelId) <= 0) {
-        setStatus(statusEl, 'error', '请填写正确的模型 ID');
-        return;
-      }
-
-      btn.disabled = true;
-      setStatus(statusEl, 'loading', upload ? '正在生成并上传 assembly glb...' : '正在生成 assembly glb...');
-      try {
-        const data = await generateAssemblyFromIoFile({
-          ioFile: ioInput.files[0],
-          modelId,
-          uploadServer,
-          upload
-        });
-        const result = data.data;
-        setStatus(statusEl, 'success', [
-          data.message,
-          `文件：${result.glbPath}`,
-          `大小：${formatBytes(result.fileSize)}`,
-          `节点/网格/材质：${result.nodeCount}/${result.meshCount}/${result.materialCount}`,
-          result.uploaded ? `服务器：${result.url}` : '未上传服务器',
-          `耗时：${formatElapsed(startedAt)}`
-        ].join('\n'));
-      } catch (error) {
-        setStatus(statusEl, 'error', `请求失败：${error.message}\n请确认本机已启动 tools\\ldraw\\generator-server`);
-      } finally {
-        btn.disabled = false;
-      }
-    });
-
-    document.getElementById('btnBackfillPlacements').addEventListener('click', async () => {
-      const statusEl = document.getElementById('partsStatus');
-      const btn = document.getElementById('btnBackfillPlacements');
-      const startedAt = performance.now();
-      btn.disabled = true;
-      setStatus(statusEl, 'loading', '正在回填零件位姿...');
-      try {
-        const response = await fetch(API_BACKFILL_PLACEMENTS_URL, { method: 'POST' });
-        const data = await response.json();
-        setJsonOutput(data);
-        if (!response.ok || !data.success) {
-          setStatus(statusEl, 'error', `回填失败：${data.message}\n耗时：${formatElapsed(startedAt)}`);
-        } else {
-          setStatus(statusEl, 'success', `回填完成：更新 ${data.data.updated}，跳过 ${data.data.skipped}，失败 ${data.data.failed}\n耗时：${formatElapsed(startedAt)}`);
-        }
-      } catch (error) {
-        setStatus(statusEl, 'error', `请求失败：${error.message}`);
       } finally {
         btn.disabled = false;
       }
