@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
@@ -320,6 +320,11 @@
             <label for="manualFile">安装说明书（可选）</label>
             <input type="file" id="manualFile" name="manual_file" accept=".pdf,application/pdf">
           </div>
+
+          <label class="checkbox-line">
+            <input type="checkbox" id="autoGenerateAssembly" checked>
+            上传成功后自动调用本地服务生成并上传 assembly_{模型ID}.glb
+          </label>
 
           <button type="submit" id="uploadSubmitBtn">上传</button>
           <div id="uploadStatus" class="status"></div>
@@ -756,10 +761,40 @@
       return data;
     }
 
+    async function generateAssemblyFromIoFile({ ioFile, modelId, uploadServer, upload = true }) {
+      const formData = new FormData();
+      formData.append('io_file', ioFile);
+      formData.append('id', String(modelId));
+      formData.append('server', uploadServer);
+      formData.append('upload', upload ? 'true' : 'false');
+
+      const response = await fetch(`${getAssemblyGeneratorBaseUrl()}/api/generate-assembly`, {
+        method: 'POST',
+        body: formData
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (_) {
+        throw new Error(`本地生成服务返回非 JSON（HTTP ${response.status}）`);
+      }
+
+      setJsonOutput(data);
+      if (!response.ok || !data.success) {
+        const detail = data.data?.stderr || data.data?.stdout || data.message || response.statusText;
+        throw new Error(detail || `HTTP ${response.status}`);
+      }
+
+      return data;
+    }
+
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const statusEl = document.getElementById('uploadStatus');
       const submitBtn = document.getElementById('uploadSubmitBtn');
+      const ioInput = document.getElementById('ioFile');
+      const autoGenerate = document.getElementById('autoGenerateAssembly').checked;
       const startedAt = performance.now();
 
       submitBtn.disabled = true;
@@ -767,11 +802,39 @@
 
       try {
         const data = await uploadModel({ confirmDuplicate: false, confirmExactMatch: false });
-        setStatus(
-          statusEl,
-          'success',
-          `上传成功\n模型 ID：${data.data.id}\n模型名称：${data.data.name}\n模型类型 ID：${data.data.modelTypeId || '无'}\n说明书地址：${data.data.manualUrl || '无'}\n调用耗时：${formatElapsed(startedAt)}`
-        );
+        const model = data.data;
+        const lines = [
+          '上传成功',
+          `模型 ID：${model.id}`,
+          `模型名称：${model.name}`,
+          `模型类型 ID：${model.modelTypeId || '无'}`,
+          `说明书地址：${model.manualUrl || '无'}`
+        ];
+
+        document.getElementById('assemblyModelId').value = model.id;
+        if (ioInput.files[0]) {
+          const transfer = new DataTransfer();
+          transfer.items.add(ioInput.files[0]);
+          document.getElementById('assemblyIoFile').files = transfer.files;
+        }
+
+        if (autoGenerate) {
+          setStatus(statusEl, 'loading', `${lines.join('\n')}\n\n正在生成并上传 assembly_${model.id}.glb...`);
+          const assemblyData = await generateAssemblyFromIoFile({
+            ioFile: ioInput.files[0],
+            modelId: model.id,
+            uploadServer: document.getElementById('assemblyUploadServer').value.trim(),
+            upload: true
+          });
+          const result = assemblyData.data;
+          lines.push(`assembly：${result.uploaded ? result.url : result.glbPath}`);
+          lines.push(`assembly 大小：${formatBytes(result.fileSize)}`);
+        } else {
+          lines.push('assembly：已跳过自动生成，可在下方手动生成');
+        }
+
+        lines.push(`调用耗时：${formatElapsed(startedAt)}`);
+        setStatus(statusEl, 'success', lines.join('\n'));
       } catch (error) {
         setStatus(statusEl, 'error', `上传失败\n错误信息：${error.message}\n调用耗时：${formatElapsed(startedAt)}`);
       } finally {
@@ -1234,22 +1297,12 @@
       btn.disabled = true;
       setStatus(statusEl, 'loading', upload ? '正在生成并上传 assembly glb...' : '正在生成 assembly glb...');
       try {
-        const formData = new FormData();
-        formData.append('io_file', ioInput.files[0]);
-        formData.append('id', modelId);
-        formData.append('server', uploadServer);
-        formData.append('upload', upload ? 'true' : 'false');
-
-        const response = await fetch(`${getAssemblyGeneratorBaseUrl()}/api/generate-assembly`, {
-          method: 'POST',
-          body: formData
+        const data = await generateAssemblyFromIoFile({
+          ioFile: ioInput.files[0],
+          modelId,
+          uploadServer,
+          upload
         });
-        const data = await response.json();
-        setJsonOutput(data);
-        if (!response.ok || !data.success) {
-          setStatus(statusEl, 'error', `生成失败：${data.message}\n${data.data?.stderr || data.data?.stdout || ''}\n耗时：${formatElapsed(startedAt)}`);
-          return;
-        }
         const result = data.data;
         setStatus(statusEl, 'success', [
           data.message,
