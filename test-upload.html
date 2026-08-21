@@ -400,6 +400,12 @@
             </div>
           </div>
           <div class="field-hint">上传模型时会自动调用该本地服务生成并上传 assembly_{模型ID}.glb；这里仅用于提前确认 Blender、LDraw 和 generator-server 是否可用。</div>
+          <div class="field-hint">
+            如果检测失败，请先在本机 PowerShell 手动启动服务：<br>
+            <code>cd 你的项目目录\tools\ldraw\generator-server</code><br>
+            <code>npm start</code><br>
+            启动后保持该窗口不要关闭，再回到本页点击“检测环境”。
+          </div>
           <div id="assemblyGenerateStatus" class="status"></div>
         </div>
       </section>
