@@ -242,7 +242,9 @@
     </div>
   </div>
   <script>
-    const API = '';
+    // 接口基址取「页面所在目录」：/blocklab/admin.html -> '/blocklab'，/admin.html -> ''
+    // 这样同一份文件在「域名 + /blocklab」与「IP 直连根路径」两种入口下都能正确请求
+    const API = location.pathname.replace(/\/[^/]*$/, '');
 
     // Navigation
     document.querySelectorAll('.nav-item').forEach(item => {

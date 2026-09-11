@@ -507,18 +507,22 @@
   </div>
 
   <script>
-    const SWAGGER_UI_URL = '/docs';
-    const API_UPLOAD_URL = '/api/admin/models/upload';
-    const API_CREATE_URL = '/api/admin/models/create';
-    const API_CREATE_MODEL_TYPE_URL = '/api/admin/model-types/create';
-    const API_MODEL_TYPES_URL = '/api/model-types';
-    const API_CLEAR_MODELS_URL = '/api/admin/data/clear-models';
-    const API_CLEAR_MODEL_TYPES_URL = '/api/admin/data/clear-model-types';
-    const API_CLEAR_USERS_URL = '/api/admin/data/clear-users';
-    const API_DELETE_MODEL_URL = '/api/admin/data/delete-model';
-    const API_DELETE_MODEL_TYPE_URL = '/api/admin/data/delete-model-type';
-    const API_DELETE_USER_URL = '/api/admin/data/delete-user';
-    const API_RECOGNITION_IMAGE_MATCH_URL = '/api/recognition/match';
+    // 接口基址取「页面所在目录」：/blocklab/test-upload.html -> '/blocklab'，/test-upload.html -> ''
+    // 这样同一份文件在「域名 + /blocklab」与「IP 直连根路径」两种入口下都能正确请求
+    const API_BASE = location.pathname.replace(/\/[^/]*$/, '');
+
+    const SWAGGER_UI_URL = API_BASE + '/docs';
+    const API_UPLOAD_URL = API_BASE + '/api/admin/models/upload';
+    const API_CREATE_URL = API_BASE + '/api/admin/models/create';
+    const API_CREATE_MODEL_TYPE_URL = API_BASE + '/api/admin/model-types/create';
+    const API_MODEL_TYPES_URL = API_BASE + '/api/model-types';
+    const API_CLEAR_MODELS_URL = API_BASE + '/api/admin/data/clear-models';
+    const API_CLEAR_MODEL_TYPES_URL = API_BASE + '/api/admin/data/clear-model-types';
+    const API_CLEAR_USERS_URL = API_BASE + '/api/admin/data/clear-users';
+    const API_DELETE_MODEL_URL = API_BASE + '/api/admin/data/delete-model';
+    const API_DELETE_MODEL_TYPE_URL = API_BASE + '/api/admin/data/delete-model-type';
+    const API_DELETE_USER_URL = API_BASE + '/api/admin/data/delete-user';
+    const API_RECOGNITION_IMAGE_MATCH_URL = API_BASE + '/api/recognition/match';
     const DEFAULT_ASSEMBLY_UPLOAD_SERVER = 'http://121.37.160.39:3000';
 
     function getAssemblyGeneratorBaseUrl() {
@@ -1138,7 +1142,7 @@
           formData.append('detail_images', file);
         }
 
-        const response = await fetch('/api/admin/recommended-models/upload', { method: 'POST', body: formData });
+        const response = await fetch(API_BASE + '/api/admin/recommended-models/upload', { method: 'POST', body: formData });
         const data = await response.json();
         setJsonOutput(data);
 
