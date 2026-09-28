@@ -325,8 +325,7 @@ firewall-cmd --reload
 ```bash
 curl -X POST http://你的服务器IP:3000/api/admin/models/upload \
   -F "name=测试模型" \
-  -F "io_file=@/path/to/test.io" \
-  -F "glb_file=@/path/to/test.glb"
+  -F "io_file=@/path/to/test.io"
 ```
 
 **预期输出**：

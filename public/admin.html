@@ -107,7 +107,10 @@
       <div id="inference-model-section" class="section">
         <div class="header">
           <h2>推理模型管理</h2>
-          <button class="btn btn-primary" onclick="showUploadModel()">上传 .pt 模型</button>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-success" id="restart-inference-btn" onclick="restartInferenceService()">重启推理服务</button>
+            <button class="btn btn-primary" onclick="showUploadModel()">上传 .pt 模型</button>
+          </div>
         </div>
         <div class="card">
           <h3 style="margin-bottom:16px;">当前模型状态</h3>
@@ -204,10 +207,6 @@
       <div class="form-group">
         <label>IO 文件 (.io) *</label>
         <input type="file" id="model-io" accept=".io">
-      </div>
-      <div class="form-group">
-        <label>3D 模型文件 (.glb) *</label>
-        <input type="file" id="model-glb" accept=".glb">
       </div>
       <div class="form-group">
         <label>说明书 (.pdf)</label>
@@ -347,7 +346,7 @@
       const sel = document.getElementById('model-type-select');
       sel.innerHTML = '<option value="">选择分类...</option>' +
         (json.data || []).map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-      ['model-name','model-io','model-glb','model-manual'].forEach(id => {
+      ['model-name','model-io','model-manual'].forEach(id => {
         const el = document.getElementById(id);
         if (el.type === 'file') el.value = ''; else el.value = '';
       });
@@ -358,14 +357,12 @@
       const name = document.getElementById('model-name').value.trim();
       const typeId = document.getElementById('model-type-select').value;
       const ioFile = document.getElementById('model-io').files[0];
-      const glbFile = document.getElementById('model-glb').files[0];
       const manualFile = document.getElementById('model-manual').files[0];
-      if (!name || !typeId || !ioFile || !glbFile) return alert('请填写必填项');
+      if (!name || !typeId || !ioFile) return alert('请填写必填项');
       const fd = new FormData();
       fd.append('name', name);
       fd.append('model_type_id', typeId);
       fd.append('io_file', ioFile);
-      fd.append('glb_file', glbFile);
       if (manualFile) fd.append('manual_file', manualFile);
       try {
         const res = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
@@ -546,6 +543,57 @@
       document.getElementById('inference-model-file').value = '';
       document.getElementById('inference-upload-progress').style.display = 'none';
       document.getElementById('inference-model-modal').classList.add('show');
+    }
+
+    async function restartInferenceService() {
+      if (!confirm('确定要重启推理服务吗？\n重启期间推理接口将暂时不可用（约几秒到十几秒）。')) return;
+      const btn = document.getElementById('restart-inference-btn');
+      const statusEl = document.getElementById('inference-service-status');
+      btn.disabled = true;
+      btn.textContent = '重启中...';
+      if (statusEl) {
+        statusEl.className = 'badge badge-warning';
+        statusEl.textContent = '正在重启...';
+      }
+      try {
+        const res = await fetch(API + '/api/admin/inference-model/restart', { method: 'POST' });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message || '重启失败');
+        // 轮询等待推理服务恢复在线（模型重新加载需要时间）
+        const deadline = Date.now() + 60000;
+        while (Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, 3000));
+          const online = await probeInferenceService();
+          if (online) {
+            alert('推理服务已重启成功 ✓');
+            return;
+          }
+        }
+        alert('重启指令已发送，但服务暂未恢复在线，请稍后刷新页面确认状态。');
+      } catch (e) {
+        alert('重启失败: ' + e.message);
+        loadInferenceModel();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '重启推理服务';
+      }
+    }
+
+    // 探测推理服务是否在线（不依赖页面上的状态徽章，供重启后轮询使用）
+    async function probeInferenceService() {
+      try {
+        const res = await fetch(API + '/api/admin/inference-model/ping', { signal: AbortSignal.timeout(3000) });
+        const json = await res.json();
+        if (json.success) {
+          const statusEl = document.getElementById('inference-service-status');
+          if (statusEl) {
+            statusEl.className = 'badge badge-success';
+            statusEl.textContent = `在线 (${json.data.device})`;
+          }
+          return true;
+        }
+      } catch { /* 服务尚未就绪，继续轮询 */ }
+      return false;
     }
 
     async function submitInferenceModel() {

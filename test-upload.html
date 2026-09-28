@@ -312,11 +312,6 @@
           </div>
 
           <div class="form-group">
-            <label for="glbFile">.glb 文件</label>
-            <input type="file" id="glbFile" name="glb_file" accept=".glb" required>
-          </div>
-
-          <div class="form-group">
             <label for="manualFile">安装说明书（可选）</label>
             <input type="file" id="manualFile" name="manual_file" accept=".pdf,application/pdf">
           </div>
@@ -654,7 +649,6 @@
       const nameInput = document.getElementById('name');
       const modelTypeSelect = document.getElementById('modelTypeSelect');
       const ioInput = document.getElementById('ioFile');
-      const glbInput = document.getElementById('glbFile');
       const manualInput = document.getElementById('manualFile');
 
       if (!modelTypeSelect.value) {
@@ -665,7 +659,6 @@
       formData.append('name', nameInput.value);
       formData.append('model_type_id', modelTypeSelect.value);
       formData.append('io_file', ioInput.files[0]);
-      formData.append('glb_file', glbInput.files[0]);
       if (manualInput.files[0]) {
         formData.append('manual_file', manualInput.files[0]);
       }

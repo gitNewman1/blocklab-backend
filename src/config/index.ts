@@ -8,6 +8,8 @@ const parsedMaxFileSizeMb = parseInt(process.env.MAX_FILE_SIZE_MB || '50', 10);
 const parsedRebrickableTimeoutMs = parseInt(process.env.REBRICKABLE_TIMEOUT_MS || '8000', 10);
 const parsedRebrickableBatchSize = parseInt(process.env.REBRICKABLE_BATCH_SIZE || '80', 10);
 const parsedRoboflowTimeoutMs = parseInt(process.env.ROBOFLOW_TIMEOUT || '15000', 10);
+const parsedWxTimeoutMs = parseInt(process.env.WX_TIMEOUT_MS || '8000', 10);
+const parsedJwtTtlDays = parseInt(process.env.JWT_TTL_DAYS || '30', 10);
 
 export const config = {
   port: Number.isFinite(parsedPort) ? parsedPort : 3000,
@@ -39,5 +41,15 @@ export const config = {
     secretId: process.env.HUNYUAN3D_SECRET_ID || '',
     secretKey: process.env.HUNYUAN3D_SECRET_KEY || '',
     region: process.env.HUNYUAN3D_REGION || 'ap-guangzhou'
+  },
+  wx: {
+    // 小程序 AppID（公开信息），Secret 只从环境变量读取，不下发到代码/仓库
+    appid: process.env.WX_APPID || 'wxa5731a718db4cf65',
+    secret: process.env.WX_SECRET || '',
+    timeoutMs: Number.isFinite(parsedWxTimeoutMs) ? parsedWxTimeoutMs : 8000
+  },
+  jwt: {
+    secret: process.env.JWT_SECRET || 'blocklab-dev-insecure-secret',
+    ttlSeconds: (Number.isFinite(parsedJwtTtlDays) ? parsedJwtTtlDays : 30) * 24 * 60 * 60
   }
 };
