@@ -14,7 +14,7 @@ model Model {
   thumbnailUrl String?  @map("thumbnail_url")
   manualUrl    String?  @map("manual_url")
   ioFileUrl    String   @map("io_file_url")
-  model3dUrl   String   @map("model_3d_url")
+  model3dUrl   String?  @map("model_3d_url")
   partCount    Int      @default(0) @map("part_count")
   partsJson    Json     @map("parts_json")
   stepsJson    Json     @map("steps_json")
@@ -34,6 +34,7 @@ model User {
   createdAt   DateTime   @default(now()) @map("created_at")
   works       Work[]
   likesGiven  WorkLike[]
+  feedbacks   Feedback[]
 
   @@map("users")
 }
@@ -52,6 +53,9 @@ model Work {
   hunyuan3dStatus String?    @map("hunyuan3d_status")
   model3dUrl      String?    @map("model_3d_url")
   isPublic      Boolean      @default(true) @map("is_public")
+  /// 审核状态：pending 待审 / approved 通过 / rejected 拒绝（发布即待审，通过才公开）
+  reviewStatus  String       @default("pending") @map("review_status")
+  reviewReason  String?      @map("review_reason")
   joinContest   Boolean      @default(false) @map("join_contest")
   createdAt     DateTime     @default(now()) @map("created_at")
   user          User         @relation(fields: [userId], references: [id])
@@ -93,6 +97,28 @@ model RecommendedModel {
 
   @@map("recommended_models")
   @@index([createdAt(sort: Desc)])
+}
+
+model Feedback {
+  id        Int      @id @default(autoincrement())
+  title     String   @db.VarChar(100)
+  content   String
+  images    String[]
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("feedbacks")
+  @@index([createdAt(sort: Desc)])
+}
+
+model AppStats {
+  id           Int      @id @default(1)
+  partCoverage Int      @default(0) @map("part_coverage")
+  matchCount   Int      @default(0) @map("match_count")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("app_stats")
 }
 
 model ModelType {

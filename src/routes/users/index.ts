@@ -1,10 +1,12 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
+import { requireAuth } from '../../plugins/auth';
 
 const prisma = new PrismaClient();
 
 export async function userRoutes(app: FastifyInstance) {
   app.get('/:userId/profile', {
+    preHandler: requireAuth,
     schema: {
       tags: ['Users'],
       summary: '获取个人信息',
