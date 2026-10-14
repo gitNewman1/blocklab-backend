@@ -39,7 +39,7 @@ type ModelVector = {
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
-  model3dUrl: string;
+  model3dUrl: string | null;
   partsJson: unknown;
   parts: InputPart[];
 };
@@ -53,7 +53,7 @@ type ScoredMatch = {
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
-  model3dUrl: string;
+  model3dUrl: string | null;
   matchType: 'exact' | 'fuzzy';
   similarity: number;
   matchedQty: number;
@@ -87,7 +87,7 @@ type ModelDetailResponse = {
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
-  model3dUrl: string;
+  model3dUrl: string | null;
   partsJson: unknown;
   stepsJson: unknown;
 };
@@ -303,6 +303,10 @@ export async function recognitionImageMatchRoutes(app: FastifyInstance) {
             stepsJson: bestModel.stepsJson
           };
         }
+      }
+
+      if (matches.length > 0) {
+        await prisma.appStats.update({ where: { id: 1 }, data: { matchCount: { increment: 1 } } }).catch(() => {});
       }
 
       return reply.send({

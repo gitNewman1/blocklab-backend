@@ -17,7 +17,7 @@ type ModelVector = {
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
-  model3dUrl: string;
+  model3dUrl: string | null;
   partsJson: unknown;
   vector: Map<string, number>;
 };
@@ -31,7 +31,7 @@ type ScoredMatch = {
   thumbnailUrl: string | null;
   manualUrl: string | null;
   ioFileUrl: string;
-  model3dUrl: string;
+  model3dUrl: string | null;
   matchType: 'exact' | 'fuzzy';
   similarity: number;
   matchedQty: number;
@@ -87,7 +87,7 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
                     thumbnailUrl: { type: ['string', 'null'] },
                     manualUrl: { type: ['string', 'null'] },
                     ioFileUrl: { type: 'string' },
-                    model3dUrl: { type: 'string' },
+                    model3dUrl: { type: ['string', 'null'] },
                     matchType: { type: 'string', enum: ['exact', 'fuzzy'] },
                     score: { type: 'number' }
                   }
@@ -193,6 +193,9 @@ export async function recognitionMatchRoutes(app: FastifyInstance) {
 
       if (body.userId) {
         await prisma.user.updateMany({ where: { id: body.userId }, data: { scanCount: { increment: 1 } } });
+      }
+      if (topMatches.length > 0) {
+        await prisma.appStats.update({ where: { id: 1 }, data: { matchCount: { increment: 1 } } }).catch(() => {});
       }
       return reply.send({
         success: true,

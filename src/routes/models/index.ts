@@ -62,7 +62,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
                     thumbnailUrl: { type: ['string', 'null'] },
                     manualUrl: { type: ['string', 'null'] },
                     ioFileUrl: { type: 'string' },
-                    model3dUrl: { type: 'string' },
+                    model3dUrl: { type: ['string', 'null'] },
                     createdAt: { type: 'string', format: 'date-time' },
                     modelTypeId: { type: ['integer', 'null'] },
                     modelTypeName: { type: ['string', 'null'] }
@@ -174,7 +174,7 @@ export async function modelQueryRoutes(app: FastifyInstance) {
                   thumbnailUrl: { type: ['string', 'null'] },
                   manualUrl: { type: ['string', 'null'] },
                   ioFileUrl: { type: 'string' },
-                  model3dUrl: { type: 'string' },
+                  model3dUrl: { type: ['string', 'null'] },
                   partsJson: { type: ['array', 'object', 'null'] },
                   stepsJson: { type: ['array', 'object', 'null'] },
                   partMeshes: {
@@ -265,7 +265,7 @@ function toModelResponse<
     thumbnailUrl: string | null;
     manualUrl: string | null;
     ioFileUrl: string;
-    model3dUrl: string;
+    model3dUrl: string | null;
     createdAt: Date;
     partsJson?: unknown;
     stepsJson?: unknown;

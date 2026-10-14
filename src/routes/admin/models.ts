@@ -52,10 +52,11 @@ export async function modelsRoutes(app: FastifyInstance) {
         }
       }
 
-      if (!name || !modelTypeId || !files.io_file || !files.glb_file) {
+      // glb_file 非必传（可由 assembly 流程补齐），manual_file 必传
+      if (!name || !modelTypeId || !files.io_file || !files.manual_file) {
         return reply.code(400).send({
           success: false,
-          message: 'Missing required fields: name, model_type_id, io_file, glb_file',
+          message: 'Missing required fields: name, model_type_id, io_file, manual_file',
           error: 'MISSING_REQUIRED_FIELD'
         });
       }
@@ -66,14 +67,21 @@ export async function modelsRoutes(app: FastifyInstance) {
           error: 'INVALID_IO_FILE'
         });
       }
-      if (!hasFileExtension(files.glb_file.filename, '.glb')) {
+      if (files.glb_file && !hasFileExtension(files.glb_file.filename, '.glb')) {
         return reply.code(400).send({
           success: false,
           message: 'glb_file must be a .glb file',
           error: 'INVALID_GLB_FILE'
         });
       }
-      if (files.manual_file && !hasOneOfExtensions(files.manual_file.filename, allowedManualExts)) {
+      if (!files.manual_file) {
+        return reply.code(400).send({
+          success: false,
+          message: 'manual_file is required',
+          error: 'MISSING_MANUAL_FILE'
+        });
+      }
+      if (!hasOneOfExtensions(files.manual_file.filename, allowedManualExts)) {
         return reply.code(400).send({
           success: false,
           message: 'manual_file must be a .pdf file',
@@ -149,9 +157,9 @@ export async function modelsRoutes(app: FastifyInstance) {
       const thumbnailFile = parsed.extractedThumbnail;
       const [ioUrl, glbUrl, thumbUrl, manualUrl] = await Promise.all([
         storageService.uploadFile(files.io_file, 'io-files'),
-        storageService.uploadFile(files.glb_file, 'models-3d'),
+        files.glb_file ? storageService.uploadFile(files.glb_file, 'models-3d') : Promise.resolve(null),
         thumbnailFile ? storageService.uploadFile(thumbnailFile, 'thumbnails') : Promise.resolve(null),
-        files.manual_file ? storageService.uploadFile(files.manual_file, 'manuals') : Promise.resolve(null)
+        storageService.uploadFile(files.manual_file, 'manuals')
       ]);
 
       const enrichedParts = await rebrickableService.enrichParts(parsed.parts, request.log);
