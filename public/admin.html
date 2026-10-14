@@ -422,7 +422,7 @@
       const sel = document.getElementById('model-type-select');
       sel.innerHTML = '<option value="">选择分类...</option>' +
         (json.data || []).map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-      ['model-name','model-io','model-manual'].forEach(id => {
+      ['model-name','model-io','model-glb','model-manual'].forEach(id => {
         const el = document.getElementById(id);
         if (el.type === 'file') el.value = ''; else el.value = '';
       });
@@ -433,6 +433,7 @@
       const name = document.getElementById('model-name').value.trim();
       const typeId = document.getElementById('model-type-select').value;
       const ioFile = document.getElementById('model-io').files[0];
+      const glbFile = document.getElementById('model-glb').files[0];
       const manualFile = document.getElementById('model-manual').files[0];
       if (!name || !typeId || !ioFile || !manualFile) return alert('请填写必填项（说明书 PDF 必传，3D 模型文件可选）');
       const fd = new FormData();
