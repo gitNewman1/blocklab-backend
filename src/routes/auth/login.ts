@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { code2Session, WechatError } from '../../services/wechat.service';
 import { signToken } from '../../services/jwt.service';
@@ -64,9 +64,8 @@ async function findOrCreateUser(identity: string, profile: { nickname?: string; 
 }
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post(
-    '/login',
-    {
+  // 登录路由配置与处理逻辑：/login 与 /login/wechat 共用（小程序端历史路径为 /login/wechat）
+  const loginOptions = {
       schema: {
         tags: ['Auth'],
         summary: '微信小程序登录:code 换 openid 登录/注册,或兼容旧版直接传 unionId',
@@ -126,8 +125,9 @@ export async function authRoutes(app: FastifyInstance) {
           }
         }
       }
-    },
-    async (request, reply) => {
+  };
+
+  const loginHandler = async (request: FastifyRequest, reply: FastifyReply) => {
       const body = request.body as LoginBody;
 
       try {
@@ -185,8 +185,11 @@ export async function authRoutes(app: FastifyInstance) {
           error: 'INTERNAL_ERROR'
         });
       }
-    }
-  );
+  };
+
+  app.post('/login', loginOptions, loginHandler);
+  // 兼容别名：小程序端历史调用路径 /login/wechat，逻辑与返回与 /login 完全一致
+  app.post('/login/wechat', loginOptions, loginHandler);
 
   app.get(
     '/users',
