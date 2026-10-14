@@ -4,6 +4,7 @@ uploads/
 .env
 *.log
 .DS_Store
+.atomcode/
 
 # Python cache / model artifacts
 __pycache__/
