@@ -1,96 +1,83 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
-import { signToken } from '../../plugins/auth';
-import { code2Session } from '../../services/wechat.service';
+import { code2Session, WechatError } from '../../services/wechat.service';
+import { signToken } from '../../services/jwt.service';
 
 const prisma = new PrismaClient();
 
-/**
- * 登录身份口径：
- * - 微信登录取 code2session 的 unionid（小程序绑定开放平台时才有），否则回退 openid，
- *   统一写入 users.union_id 列（该列是用户唯一身份键）。
- * - 将来接华为账号 / 手机号登录时，在此按各自的外部身份键走同一个 upsert 逻辑，
- *   需要区分登录方式时再扩展身份表即可，token 结构不变。
- */
-async function upsertUserByExternalId(externalId: string) {
-  const existing = await prisma.user.findUnique({ where: { unionId: externalId } });
-  if (existing) return { user: existing, isNewUser: false };
-  const user = await prisma.user.create({ data: { unionId: externalId } });
-  return { user, isNewUser: true };
+interface LoginBody {
+  // 兼容旧版模拟入参:直接传 unionId
+  unionId?: string;
+  // 微信小程序 wx.login 拿到的临时 code,存在时用它换 openid
+  code?: string;
+  nickName?: string;
+  avatarUrl?: string;
 }
 
-function loginData(user: { id: string }, isNewUser: boolean) {
+interface LoginResult {
+  user: {
+    id: string;
+    unionId: string;
+    nickname: string | null;
+    avatarUrl: string | null;
+  };
+  isNewUser: boolean;
+}
+
+async function findOrCreateUser(identity: string, profile: { nickname?: string; avatarUrl?: string }): Promise<LoginResult> {
+  const existing = await prisma.user.findUnique({ where: { unionId: identity } });
+
+  if (existing) {
+    // 微信侧资料可能变化,登录时带上了昵称/头像就顺手更新
+    let fresh = existing;
+    if (profile.nickname !== undefined || profile.avatarUrl !== undefined) {
+      fresh = await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          ...(profile.nickname !== undefined ? { nickname: profile.nickname || null } : {}),
+          ...(profile.avatarUrl !== undefined ? { avatarUrl: profile.avatarUrl || null } : {})
+        }
+      });
+    }
+    return {
+      user: {
+        id: fresh.id,
+        unionId: fresh.unionId,
+        nickname: fresh.nickname,
+        avatarUrl: fresh.avatarUrl
+      },
+      isNewUser: false
+    };
+  }
+
+  const user = await prisma.user.create({
+    data: {
+      unionId: identity,
+      ...(profile.nickname ? { nickname: profile.nickname } : {}),
+      ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {})
+    }
+  });
   return {
-    token: signToken({ userId: user.id }),
-    userId: user.id,
-    isNewUser
+    user: { id: user.id, unionId: user.unionId, nickname: user.nickname, avatarUrl: user.avatarUrl },
+    isNewUser: true
   };
 }
 
 export async function authRoutes(app: FastifyInstance) {
-  // 微信小程序登录：前端 wx.login() 拿到 code 后调这里换 token
-  app.post(
-    '/login/wechat',
-    {
-      schema: {
-        tags: ['Auth'],
-        summary: '微信小程序登录（code 换 token）',
-        body: {
-          type: 'object',
-          required: ['code'],
-          properties: { code: { type: 'string', minLength: 1 } }
-        },
-        response: {
-          200: {
-            description: '登录成功',
-            type: 'object',
-            properties: {
-              success: { type: 'boolean' },
-              message: { type: 'string' },
-              data: {
-                type: 'object',
-                properties: {
-                  token: { type: 'string' },
-                  userId: { type: 'string' },
-                  isNewUser: { type: 'boolean' }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    async (request, reply) => {
-      try {
-        const { code } = request.body as { code: string };
-        const session = await code2Session(code);
-        const externalId = session.unionid ?? session.openid;
-        const { user, isNewUser } = await upsertUserByExternalId(externalId);
-        return { success: true, message: 'Login successful', data: loginData(user, isNewUser) };
-      } catch (error: any) {
-        request.log.error({ error: error.message }, 'WeChat login failed');
-        const isWxError = error.message.startsWith('微信登录失败');
-        return reply.code(isWxError ? 401 : 500).send({
-          success: false,
-          message: isWxError ? error.message : '登录服务异常，请稍后重试',
-          error: isWxError ? 'WECHAT_LOGIN_FAILED' : 'INTERNAL_ERROR'
-        });
-      }
-    }
-  );
-
-  // 兼容旧接口：直接用 unionId 登录/创建用户（同时返回 token）
   app.post(
     '/login',
     {
       schema: {
         tags: ['Auth'],
-        summary: '根据 unionId 登录或自动创建用户',
+        summary: '微信小程序登录:code 换 openid 登录/注册,或兼容旧版直接传 unionId',
         body: {
           type: 'object',
-          required: ['unionId'],
+          anyOf: [{ required: ['unionId'] }, { required: ['code'] }],
           properties: {
-            unionId: { type: 'string', minLength: 1 }
+            unionId: { type: 'string', minLength: 1, description: '兼容旧版:直接以该值作为用户唯一标识登录' },
+            code: { type: 'string', minLength: 1, description: 'wx.login 获取的临时 code,通过微信 code2session 换取 openid' },
+            nickName: { type: 'string', maxLength: 100, description: '微信昵称,可选' },
+            avatarUrl: { type: 'string', description: '微信头像地址,可选' }
           }
         },
         response: {
@@ -104,27 +91,98 @@ export async function authRoutes(app: FastifyInstance) {
                 type: 'object',
                 properties: {
                   token: { type: 'string' },
-                  userId: { type: 'string' },
-                  isNewUser: { type: 'boolean' }
+                  isNewUser: { type: 'boolean' },
+                  user: {
+                    type: 'object',
+                    properties: {
+                      unionId: { type: 'string' },
+                      userId: { type: 'string' },
+                      nickName: { type: ['string', 'null'] },
+                      avatarUrl: { type: ['string', 'null'] }
+                    }
+                  }
                 }
               }
+            }
+          },
+          400: {
+            description: '请求参数缺失',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              error: { type: 'string' }
+            }
+          },
+          401: {
+            description: '微信 code 换 session 失败',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              message: { type: 'string' },
+              error: { type: 'string' }
             }
           }
         }
       }
     },
     async (request, reply) => {
-      const { unionId } = request.body as { unionId: string };
-
-      if (!unionId) {
-        return reply.status(400).send({ error: 'unionId is required' });
-      }
+      const body = request.body as LoginBody;
 
       try {
-        const { user, isNewUser } = await upsertUserByExternalId(unionId);
-        return { success: true, message: 'Login successful', data: loginData(user, isNewUser) };
+        let identity = body.unionId;
+        if (body.code) {
+          const session = await code2Session(body.code);
+          // session_key 仅用于微信服务端通信,不落库、不记录日志
+          identity = session.openid;
+        }
+
+        if (!identity) {
+          return reply.code(400).send({
+            success: false,
+            message: 'unionId or code is required',
+            error: 'BAD_REQUEST'
+          });
+        }
+
+        const { user, isNewUser } = await findOrCreateUser(identity, {
+          nickname: body.nickName,
+          avatarUrl: body.avatarUrl
+        });
+
+        const token = signToken(user.id);
+
+        return reply.send({
+          success: true,
+          message: isNewUser ? 'User created' : 'Login successful',
+          data: {
+            token,
+            isNewUser,
+            // 兼容字段:顶层 userId 便于旧调用方直接取用
+            userId: user.id,
+            // 契约约定:该字段返回的是当前登录身份(小程序侧传 code 时为微信 openid)
+            user: {
+              unionId: user.unionId,
+              userId: user.id,
+              nickName: user.nickname,
+              avatarUrl: user.avatarUrl
+            }
+          }
+        });
       } catch (error: any) {
-        return reply.status(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
+        if (error instanceof WechatError) {
+          return reply.code(401).send({
+            success: false,
+            message: error.message,
+            error: 'WECHAT_CODE2SESSION_FAILED'
+          });
+        }
+        request.log.error({ error: error.message, stack: error.stack }, 'Login failed');
+        return reply.code(500).send({
+          success: false,
+          message: error.message,
+          error: 'INTERNAL_ERROR'
+        });
       }
     }
   );

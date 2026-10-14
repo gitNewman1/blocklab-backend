@@ -1,38 +1,72 @@
 import { config } from '../config';
 
-export interface WechatSession {
+export interface Code2SessionResult {
   openid: string;
-  /** 小程序绑定了微信开放平台账号时才返回 */
   unionid?: string;
-  /** 仅服务端留存，绝不下发前端 */
   sessionKey: string;
 }
 
+export class WechatError extends Error {
+  constructor(
+    message: string,
+    public readonly errcode?: number
+  ) {
+    super(message);
+    this.name = 'WechatError';
+  }
+}
+
+interface Code2SessionRawResponse {
+  openid?: string;
+  session_key?: string;
+  unionid?: string;
+  errcode?: number;
+  errmsg?: string;
+}
+
 /**
- * 微信小程序登录：用 wx.login() 的 code 换取 openid/session_key
- * 文档：https://developers.weixin.qq.com/miniprogram/dev/OpenApiDoc/user-login/code2Session.html
+ * 用小程序 wx.login 拿到的 code 换取 openid / session_key。
+ * 文档: https://developers.weixin.qq.com/miniprogram/dev/OpenApiDoc/user-login/code2Session.html
+ * 业务成功时返回的 JSON 里没有 errcode 字段，失败时返回 { errcode, errmsg }。
  */
-export async function code2Session(code: string): Promise<WechatSession> {
-  if (!config.wechat.appId || !config.wechat.secret) {
-    throw new Error('服务端未配置 WX_APPID / WX_SECRET');
+export async function code2Session(code: string): Promise<Code2SessionResult> {
+  if (!config.wx.secret) {
+    throw new WechatError('WX_SECRET 未配置，请检查服务器环境变量');
   }
-  const url =
-    'https://api.weixin.qq.com/sns/jscode2session' +
-    `?appid=${encodeURIComponent(config.wechat.appId)}` +
-    `&secret=${encodeURIComponent(config.wechat.secret)}` +
-    `&js_code=${encodeURIComponent(code)}` +
-    '&grant_type=authorization_code';
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(config.wechat.timeoutMs) });
-  const data = (await res.json()) as { errcode?: number; errmsg?: string; openid?: string; unionid?: string; session_key?: string };
+  const url = new URL('https://api.weixin.qq.com/sns/jscode2session');
+  url.searchParams.set('appid', config.wx.appid);
+  url.searchParams.set('secret', config.wx.secret);
+  url.searchParams.set('js_code', code);
+  url.searchParams.set('grant_type', 'authorization_code');
 
-  if (data.errcode) {
-    throw new Error(`微信登录失败：${data.errmsg ?? 'unknown'} (errcode ${data.errcode})`);
+  let raw: Code2SessionRawResponse;
+  try {
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      signal: AbortSignal.timeout(config.wx.timeoutMs)
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+    raw = (await response.json()) as Code2SessionRawResponse;
+  } catch (error: any) {
+    throw new WechatError(`微信 code2session 请求失败: ${error.message}`);
   }
-  if (!data.openid) {
-    throw new Error('微信登录失败：未返回 openid');
+
+  if (raw.errcode) {
+    // 常见: 40029 code 无效, 40163 code 已使用, 45011 频率限制, 41002 secret 无效
+    throw new WechatError(`微信 code2session 失败(errno:${raw.errcode}): ${raw.errmsg || 'unknown error'}`, raw.errcode);
   }
-  return { openid: data.openid, unionid: data.unionid, sessionKey: data.session_key ?? '' };
+  if (!raw.openid) {
+    throw new WechatError('微信 code2session 响应缺少 openid');
+  }
+
+  return {
+    openid: raw.openid,
+    unionid: raw.unionid,
+    sessionKey: raw.session_key || ''
+  };
 }
 
 // ---- 小程序 access_token 与内容安全 msgSecCheck ----
@@ -44,17 +78,17 @@ export async function getAccessToken(): Promise<string> {
   if (accessTokenCache && accessTokenCache.expiresAt > Date.now()) {
     return accessTokenCache.token;
   }
-  if (!config.wechat.appId || !config.wechat.secret) {
-    throw new Error('服务端未配置 WX_APPID / WX_SECRET');
+  if (!config.wx.appid || !config.wx.secret) {
+    throw new WechatError('WX_APPID / WX_SECRET 未配置，请检查服务器环境变量');
   }
   const url =
     'https://api.weixin.qq.com/cgi-bin/token' +
-    `?grant_type=client_credential&appid=${encodeURIComponent(config.wechat.appId)}` +
-    `&secret=${encodeURIComponent(config.wechat.secret)}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(config.wechat.timeoutMs) });
+    `?grant_type=client_credential&appid=${encodeURIComponent(config.wx.appid)}` +
+    `&secret=${encodeURIComponent(config.wx.secret)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(config.wx.timeoutMs) });
   const data = (await res.json()) as { access_token?: string; expires_in?: number; errcode?: number; errmsg?: string };
   if (!data.access_token) {
-    throw new Error(`获取 access_token 失败：${data.errmsg ?? 'unknown'} (errcode ${data.errcode ?? '-'})`);
+    throw new WechatError(`获取 access_token 失败：${data.errmsg ?? 'unknown'} (errcode ${data.errcode ?? '-'})`, data.errcode);
   }
   accessTokenCache = { token: data.access_token, expiresAt: Date.now() + ((data.expires_in ?? 7200) - 60) * 1000 };
   return accessTokenCache.token;
@@ -78,7 +112,7 @@ export async function msgSecCheck(text: string, openid?: string): Promise<TextCh
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version: 2, openid: openid ?? '', scene: 2, content: text }),
-      signal: AbortSignal.timeout(config.wechat.timeoutMs)
+      signal: AbortSignal.timeout(config.wx.timeoutMs)
     });
     const data = (await res.json()) as {
       errcode?: number;

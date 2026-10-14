@@ -155,7 +155,7 @@ export async function modelsRoutes(app: FastifyInstance) {
       }
 
       const thumbnailFile = parsed.extractedThumbnail;
-      const [ioUrl, glbUrl, thumbUrl, manualUrl] = await Promise.all([
+      const [ioUrl, thumbUrl, manualUrl] = await Promise.all([
         storageService.uploadFile(files.io_file, 'io-files'),
         files.glb_file ? storageService.uploadFile(files.glb_file, 'models-3d') : Promise.resolve(null),
         thumbnailFile ? storageService.uploadFile(thumbnailFile, 'thumbnails') : Promise.resolve(null),
@@ -179,7 +179,7 @@ export async function modelsRoutes(app: FastifyInstance) {
           thumbnailUrl: thumbUrl,
           manualUrl,
           ioFileUrl: ioUrl,
-          model3dUrl: glbUrl,
+          model3dUrl: '',
           partCount,
           partsJson: enrichedParts as any,
           stepsJson: parsed.steps as any

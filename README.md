@@ -50,7 +50,6 @@ Server listens on `http://localhost:3000`.
 Required fields:
 - `name`: model name
 - `io_file`: `.io` file
-- `glb_file`: `.glb` file
 
 Optional fields:
 - `manual_file`: pdf file

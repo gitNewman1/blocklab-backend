@@ -21,19 +21,19 @@ export interface JwtPayload {
   exp?: number;
 }
 
-/** 签发登录 token（expiresIn 用 JWT_TTL_DAYS 控制） */
+/** 签发登录 token（expiresIn 用 JWT_TTL_DAYS 换算的 ttlSeconds 控制） */
 export function signToken(payload: { userId: string; openid?: string | null }): string {
   return jwt.sign(
     { userId: payload.userId, ...(payload.openid ? { openid: payload.openid } : {}) },
-    config.auth.jwtSecret,
-    { expiresIn: `${config.auth.jwtTtlDays}d` }
+    config.jwt.secret,
+    { expiresIn: config.jwt.ttlSeconds }
   );
 }
 
 /** 解析并校验 token，失败返回 null（不抛异常） */
 export function parseToken(token: string): JwtPayload | null {
   try {
-    const decoded = jwt.verify(token, config.auth.jwtSecret);
+    const decoded = jwt.verify(token, config.jwt.secret);
     if (typeof decoded === 'string' || typeof decoded.userId !== 'string') return null;
     return decoded as JwtPayload;
   } catch {

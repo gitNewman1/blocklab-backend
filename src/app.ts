@@ -14,6 +14,7 @@ import { modelQueryRoutes } from './routes/models';
 import { inferenceModelRoutes } from './routes/admin/inference-model';
 import { uploadRoutes } from './routes/admin/upload';
 import { authRoutes } from './routes/auth/login';
+import { avatarUploadRoutes } from './routes/auth/avatar-upload';
 import { feedbackRoutes } from './routes/feedback';
 import { adminFeedbackRoutes } from './routes/admin/feedback';
 import { adminWorkReviewRoutes } from './routes/admin/work-review';
@@ -64,6 +65,7 @@ export async function buildApp() {
   await app.register(modelQueryRoutes, { prefix: '/api/models' });
   await app.register(modelTypeRoutes, { prefix: '/api/model-types' });
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(avatarUploadRoutes, { prefix: '/api/auth' });
   await app.register(feedbackRoutes, { prefix: '/api/feedback' });
   await app.register(adminFeedbackRoutes, { prefix: '/api/admin/feedback' });
   await app.register(userUploadRoutes, { prefix: '/api/upload' });

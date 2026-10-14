@@ -1,10 +1,15 @@
 import { FastifyInstance } from 'fastify';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../../config';
 
+const execFileAsync = promisify(execFile);
 const MODEL_DIR = path.resolve(config.storage.uploadRoot, '..', 'inference_service');
 const MODEL_FILENAME = 'best.pt';
+// 推理服务进程名（pm2），可通过环境变量覆盖
+const INFERENCE_PM2_NAME = process.env.INFERENCE_PM2_NAME || 'blocklab-inference';
 
 export async function inferenceModelRoutes(app: FastifyInstance) {
   // 探活：检测推理服务是否在线
@@ -39,6 +44,32 @@ export async function inferenceModelRoutes(app: FastifyInstance) {
         success: false,
         message: '推理服务未启动，请运行 inference_service',
         code: 'SERVICE_OFFLINE'
+      });
+    }
+  });
+
+  app.post('/inference-model/restart', async (request, reply) => {
+    try {
+      // 仅重启固定的 pm2 推理服务进程，不接受用户输入的命令，避免命令注入
+      const { stdout, stderr } = await execFileAsync('pm2', ['restart', INFERENCE_PM2_NAME], {
+        timeout: 30000
+      });
+      if (stderr) request.log.warn({ stderr }, 'pm2 restart stderr');
+      request.log.info(`Inference service "${INFERENCE_PM2_NAME}" restart requested`);
+      return reply.send({
+        success: true,
+        message: '重启指令已发送，推理服务正在重新加载，请稍候',
+        data: { processName: INFERENCE_PM2_NAME, output: stdout }
+      });
+    } catch (error: any) {
+      request.log.error(
+        { error: error.message, stderr: error.stderr },
+        'Inference service restart failed'
+      );
+      return reply.code(500).send({
+        success: false,
+        message: `重启失败: ${error.stderr || error.message}，请检查 pm2 进程 ${INFERENCE_PM2_NAME} 是否存在`,
+        error: 'RESTART_FAILED'
       });
     }
   });
