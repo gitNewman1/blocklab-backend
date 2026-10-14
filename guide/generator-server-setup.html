@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分步动画生成服务配置说明</title>
+  <style>
+    body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #2c3e50; line-height: 1.8; }
+    h1 { font-size: 24px; border-bottom: 2px solid #3498db; padding-bottom: 8px; }
+    h2 { font-size: 18px; margin-top: 28px; }
+    code { background: #f0f3f5; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+    pre { background: #f0f3f5; padding: 12px 16px; border-radius: 6px; overflow-x: auto; font-size: 13px; line-height: 1.6; }
+    .tip { background: #eaf6ff; border-left: 4px solid #3498db; padding: 10px 14px; border-radius: 4px; margin: 12px 0; font-size: 14px; }
+    .warn { background: #fff7e6; border-left: 4px solid #f39c12; padding: 10px 14px; border-radius: 4px; margin: 12px 0; font-size: 14px; }
+    ol li, ul li { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <h1>分步动画生成服务（generator-server）配置说明</h1>
+
+  <h2>这是什么</h2>
+  <p>管理后台"添加模型"时，系统会把 .io 零件文件交给<strong>你电脑上</strong>的一个本地服务，由它调用 Blender + LDraw 零件库，把模型渲染成<strong>带分步拼装动画的 assembly_{模型ID}.glb</strong> 并自动上传。这个服务很重（Blender + 全量 LDraw 零件库，数 GB），所以装在你自己的电脑上，而不是云服务器。</p>
+
+  <h2>一次性配置（推荐：看门狗自启）</h2>
+  <p>在原来能成功生成动画的那台 Windows 电脑上：</p>
+  <ol>
+    <li><a href="../setup-generator-autostart.bat" download>下载看门狗自启脚本</a>（setup-generator-autostart.bat）</li>
+    <li>双击运行，按提示输入 generator-server 所在目录（例如 <code>E:\DevcoProjects\BlockLab\io2glb\tools\ldraw\generator-server</code>）</li>
+    <li>脚本会：注册开机自启（登录 Windows 后隐藏窗口自动运行 <code>npm start</code>）→ 注册每 5 分钟看门狗计划任务（检测 5177 端口，掉线自动拉起）→ 立即启动服务 → 自动做一次环境检测</li>
+    <li>看到 <strong>[OK] 配置完成</strong> 即配置完成。以后开机无需任何手动操作，任何时候打开管理后台服务都是就绪状态</li>
+  </ol>
+
+  <h2>手动启动（临时用一次）</h2>
+  <pre>cd 你的项目目录\tools\ldraw\generator-server
+npm start</pre>
+  <p>保持窗口开着，服务就在 5177 端口运行；关窗口即停止。</p>
+
+  <h2>使用前提</h2>
+  <ul>
+    <li>用<strong>运行了生成服务的那台电脑</strong>打开管理后台</li>
+    <li>地址用 <strong>http://</strong> 开头（例如 <code>http://124.221.190.181/admin.html</code>）。HTTPS 页面会被浏览器拦截对本机 http://127.0.0.1:5177 的请求</li>
+    <li>先点"检测环境"确认 ✅，再上传模型</li>
+  </ul>
+
+  <div class="tip">生成失败不影响模型本身——模型记录、io/glb/说明书都会正常入库，只是暂时没有分步动画，之后补生成即可。</div>
+
+  <div class="warn">脚本只负责"启动和自启"；Blender、LDraw 零件库需要在这台电脑上已经装好（以前用过 test-upload.html 成功生成过动画，就说明已装好）。</div>
+
+  <p style="margin-top:32px;"><a href="../admin.html" style="color:#3498db;">← 返回管理后台</a></p>
+</body>
+</html>

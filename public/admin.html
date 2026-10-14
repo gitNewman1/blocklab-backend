@@ -55,8 +55,11 @@
       <div class="nav-item" data-section="model-types">模型分类</div>
       <div class="nav-item" data-section="recommended">推荐商品</div>
       <div class="nav-item" data-section="works">作品管理</div>
+      <div class="nav-item" data-section="work-review">作品审核<span id="review-badge" style="display:none;background:#e74c3c;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-left:6px;">0</span></div>
       <div class="nav-item" data-section="users">用户管理</div>
       <div class="nav-item" data-section="inference-model">推理模型</div>
+      <div class="nav-item" data-section="feedback">意见反馈</div>
+      <div class="nav-item" data-section="stats">应用统计</div>
     </div>
     <div class="main">
       <div id="models-section" class="section active">
@@ -103,6 +106,43 @@
         </div>
       </div>
 
+      <!-- 意见反馈 -->
+      <div id="feedback-section" class="section">
+        <div class="header">
+          <h2>意见反馈</h2>
+        </div>
+        <div class="card">
+          <div id="feedback-list" class="loading">加载中...</div>
+        </div>
+      </div>
+
+      <!-- 作品审核 -->
+      <div id="work-review-section" class="section">
+        <div class="header">
+          <h2>作品审核</h2>
+          <div>
+            <button class="btn" data-review-filter="pending" onclick="setReviewFilter('pending')">待审</button>
+            <button class="btn" data-review-filter="approved" onclick="setReviewFilter('approved')">已通过</button>
+            <button class="btn" data-review-filter="rejected" onclick="setReviewFilter('rejected')">已拒绝</button>
+            <button class="btn" data-review-filter="all" onclick="setReviewFilter('all')">全部</button>
+          </div>
+        </div>
+        <div class="card">
+          <div id="work-review-list" class="loading">加载中...</div>
+        </div>
+      </div>
+
+      <!-- 应用统计 -->
+      <div id="stats-section" class="section">
+        <div class="header">
+          <h2>应用统计</h2>
+          <button class="btn btn-primary" onclick="showEditStats()">编辑</button>
+        </div>
+        <div class="card">
+          <div id="stats-info" class="loading">加载中...</div>
+        </div>
+      </div>
+
       <!-- 推理模型管理 -->
       <div id="inference-model-section" class="section">
         <div class="header">
@@ -121,6 +161,25 @@
             <li>重启命令：<code>pm2 restart blocklab-inference</code> 或 <code>docker restart &lt;容器名&gt;</code></li>
           </ol>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 编辑应用统计 -->
+  <div id="stats-modal" class="modal">
+    <div class="modal-content">
+      <h3>编辑应用统计</h3>
+      <div class="form-group">
+        <label>覆盖零件数 *</label>
+        <input type="number" id="stats-part-coverage" min="0" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>匹配次数 *</label>
+        <input type="number" id="stats-match-count" min="0" placeholder="0">
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="closeModal('stats-modal')">取消</button>
+        <button class="btn btn-primary" onclick="submitStats()">保存</button>
       </div>
     </div>
   </div>
@@ -206,12 +265,22 @@
         <input type="file" id="model-io" accept=".io">
       </div>
       <div class="form-group">
-        <label>3D 模型文件 (.glb) *</label>
+        <label>3D 模型文件 (.glb)（选填，后续可由分步动画生成）</label>
         <input type="file" id="model-glb" accept=".glb">
       </div>
       <div class="form-group">
-        <label>说明书 (.pdf)</label>
+        <label>说明书 (.pdf) *</label>
         <input type="file" id="model-manual" accept=".pdf">
+      </div>
+      <div class="form-group">
+        <label>分步动画生成（.io → assembly_{ID}.glb）</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="assembly-server" style="flex:1" value="http://127.0.0.1:5177" placeholder="本机生成服务地址">
+          <button class="btn" onclick="checkAssemblyEnv()">检测环境</button>
+        </div>
+        <p style="color:#888;font-size:12px;margin-top:4px;">模型上传成功后会自动调用本机生成服务把 .io 转成带分步动画的 assembly_{模型ID}.glb 并上传；生成失败不影响模型本身。请用运行了 generator-server 的电脑打开本页（建议通过 http://IP/admin.html 访问，HTTPS 页面会被浏览器拦截对本机服务的请求）。</p>
+        <p style="color:#888;font-size:12px;margin-top:4px;">服务没启动？在这台电脑上<a href="setup-generator-autostart.bat" download>下载看门狗自启脚本</a>，双击运行一次即可：配置开机自启 + 每 5 分钟自动检测、掉线自动拉起，之后打开本后台服务永远就绪。<a href="guide/generator-server-setup.html" style="color:#3498db;">详细说明</a></p>
+        <p id="assembly-status" style="font-size:12px;margin-top:4px;"></p>
       </div>
       <div class="form-actions">
         <button class="btn" onclick="closeModal('model-modal')">取消</button>
@@ -264,6 +333,9 @@
       else if (section === 'recommended') loadRecommended();
       else if (section === 'works') loadWorks();
       else if (section === 'users') loadUsers();
+      else if (section === 'feedback') loadFeedback();
+      else if (section === 'work-review') loadWorkReview();
+      else if (section === 'stats') loadStats();
       else if (section === 'inference-model') loadInferenceModel();
     }
 
@@ -360,13 +432,14 @@
       const ioFile = document.getElementById('model-io').files[0];
       const glbFile = document.getElementById('model-glb').files[0];
       const manualFile = document.getElementById('model-manual').files[0];
-      if (!name || !typeId || !ioFile || !glbFile) return alert('请填写必填项');
+      if (!name || !typeId || !ioFile || !manualFile) return alert('请填写必填项（说明书 PDF 必传，3D 模型文件可选）');
       const fd = new FormData();
       fd.append('name', name);
       fd.append('model_type_id', typeId);
       fd.append('io_file', ioFile);
-      fd.append('glb_file', glbFile);
-      if (manualFile) fd.append('manual_file', manualFile);
+      if (glbFile) fd.append('glb_file', glbFile);
+      fd.append('manual_file', manualFile);
+      let modelData = null;
       try {
         const res = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
         const json = await res.json();
@@ -376,18 +449,86 @@
           const res2 = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
           const json2 = await res2.json();
           if (!json2.success) return alert(json2.message || '上传失败');
+          modelData = json2.data;
         } else if (json.error === 'DUPLICATE_PARTS_MATCH') {
           if (!confirm(`存在相同零件组合的模型(${json.data.matchedCount}个)，是否继续？`)) return;
           fd.append('confirm_exact_match', 'true');
           const res2 = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
           const json2 = await res2.json();
           if (!json2.success) return alert(json2.message || '上传失败');
-        } else if (!json.success) {
+          modelData = json2.data;
+        } else if (json.success) {
+          modelData = json.data;
+        } else {
           return alert(json.message || '上传失败');
         }
+
+        // 上传成功后生成带分步动画的 assembly_{ID}.glb（与 test-upload.html 同流程）
+        const asmStatus = document.getElementById('assembly-status');
+        let asmMsg = '分步动画：未生成（无 .io 文件）';
+        if (ioFile && modelData && modelData.id) {
+          asmStatus.textContent = `正在生成分步动画 assembly_${modelData.id}.glb（可能需要几分钟）...`;
+          try {
+            const asm = await generateAssemblyFromIoFile(ioFile, modelData.id);
+            const r = asm.data || {};
+            asmMsg = `分步动画：已${r.uploaded ? '上传 ' + r.url : '生成 ' + r.glbPath}` + (r.fileSize ? `（${(r.fileSize / 1048576).toFixed(1)}MB）` : '');
+            asmStatus.textContent = asmMsg;
+          } catch(e) {
+            asmMsg = '分步动画生成失败：' + e.message + '（模型本身已上传成功）';
+            asmStatus.textContent = asmMsg;
+          }
+        }
+        alert(`模型上传成功（ID: ${modelData.id}）\n${asmMsg}`);
         closeModal('model-modal');
         loadModels();
-      } catch(e) { alert('请求失败'); }
+      } catch(e) { alert('请求失败: ' + e.message); }
+    }
+
+    // ---- 分步动画（io → assembly glb），调用操作者本机的 generator-server ----
+    const DEFAULT_ASSEMBLY_UPLOAD_SERVER = 'https://api.ai-youtoo.cn/blocklab';
+
+    function getAssemblyServer() {
+      return (document.getElementById('assembly-server').value || '').replace(/\/+$/, '');
+    }
+
+    async function checkAssemblyEnv() {
+      const st = document.getElementById('assembly-status');
+      st.textContent = '正在检测本机生成服务...';
+      try {
+        const res = await fetch(getAssemblyServer() + '/api/env-check');
+        const json = await res.json();
+        if (!json.success) {
+          st.textContent = '⚠️ 生成服务响应异常：' + (json.message || ('HTTP ' + res.status));
+          return;
+        }
+        const d = json.data || {};
+        // 如实展示服务返回的所有 *Found 布尔标志（blenderFound/makeScriptFound 等），避免"服务在线但组件缺失"的假绿灯
+        const LABELS = { blenderFound: 'Blender', makeScriptFound: '生成脚本', ldrawFound: 'LDraw 零件库' };
+        const flags = Object.entries(d)
+          .filter(([, v]) => typeof v === 'boolean')
+          .map(([k, v]) => (v ? '✅ ' : '❌ ') + (LABELS[k] || k));
+        const allOk = flags.length === 0 || flags.every(f => f.startsWith('✅'));
+        st.textContent = (allOk ? '✅ 服务在线，组件齐全' : '⚠️ 服务在线，但有组件缺失（生成会失败，请先修复）') +
+          (flags.length ? ' —— ' + flags.join('，') : '') +
+          (d.toolRoot ? '（toolRoot: ' + d.toolRoot + '）' : '');
+      } catch(e) {
+        st.textContent = '❌ 无法连接 ' + getAssemblyServer() + ' ：请在本机 tools/ldraw/generator-server 目录执行 npm start 后重试（HTTPS 页面下浏览器可能拦截本机请求，建议用 http:// 服务器IP/admin.html 访问）。';
+      }
+    }
+
+    async function generateAssemblyFromIoFile(ioFile, modelId) {
+      const gfd = new FormData();
+      gfd.append('io_file', ioFile);
+      gfd.append('id', String(modelId));
+      gfd.append('server', DEFAULT_ASSEMBLY_UPLOAD_SERVER);
+      gfd.append('upload', 'true');
+      const res = await fetch(getAssemblyServer() + '/api/generate-assembly', { method: 'POST', body: gfd });
+      let json = {};
+      try { json = await res.json(); } catch(_) { throw new Error(`生成服务返回非 JSON（HTTP ${res.status}）`); }
+      if (!res.ok || !json.success) {
+        throw new Error(json.data?.stderr || json.data?.stdout || json.message || `HTTP ${res.status}`);
+      }
+      return json;
     }
 
     async function deleteModel(id) {
@@ -488,6 +629,158 @@
     // ---- Users ----
     async function loadUsers() {
       document.getElementById('users-list').innerHTML = '<div class="empty">请通过用户ID查询</div>';
+    }
+
+    // ---- Feedback ----
+    async function loadFeedback() {
+      const el = document.getElementById('feedback-list');
+      el.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const res = await fetch(API + '/api/admin/feedback?page=1&limit=50');
+        const json = await res.json();
+        const items = (json.data && json.data.items) || [];
+        if (!items.length) { el.innerHTML = '<div class="empty">暂无反馈</div>'; return; }
+        el.innerHTML = `<table class="table">
+          <thead><tr><th>ID</th><th>标题</th><th>内容</th><th>截图</th><th>用户</th><th>时间</th></tr></thead>
+          <tbody>${items.map(f => `<tr>
+            <td>${f.id}</td>
+            <td style="max-width:180px;word-break:break-all">${esc(f.title)}</td>
+            <td style="max-width:280px;word-break:break-all;white-space:pre-wrap">${esc(f.content)}</td>
+            <td>${(f.images || []).map(u => `<a href="${esc(u)}" target="_blank"><img src="${esc(u)}" class="img-preview"></a>`).join('') || '-'}</td>
+            <td style="font-size:12px">${f.userName ? esc(f.userName) : '<span class="badge badge-warning">匿名</span>'}</td>
+            <td>${new Date(f.createdAt).toLocaleString()}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+    }
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // ---- App Stats ----
+    async function loadStats() {
+      const el = document.getElementById('stats-info');
+      el.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const res = await fetch(API + '/api/admin/stats');
+        const json = await res.json();
+        const d = json.data || {};
+        el.innerHTML = `<table class="table">
+          <thead><tr><th>覆盖零件数</th><th>匹配次数</th><th>最后更新</th></tr></thead>
+          <tbody><tr>
+            <td style="font-size:24px;font-weight:700;color:#2c3e50">${d.partCoverage ?? 0}</td>
+            <td style="font-size:24px;font-weight:700;color:#2c3e50">${d.matchCount ?? 0}</td>
+            <td>${d.updatedAt ? new Date(d.updatedAt).toLocaleString() : '-'}</td>
+          </tr></tbody>
+        </table>
+        <p style="color:#888;font-size:12px;margin-top:8px;">匹配次数由每次识别匹配成功自动 +1；覆盖零件数可点击右上角"编辑"手工维护。</p>`;
+      } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+    }
+
+    function showEditStats() {
+      fetch(API + '/api/admin/stats').then(r => r.json()).then(json => {
+        const d = json.data || {};
+        document.getElementById('stats-part-coverage').value = d.partCoverage ?? 0;
+        document.getElementById('stats-match-count').value = d.matchCount ?? 0;
+        document.getElementById('stats-modal').classList.add('show');
+      });
+    }
+
+    async function submitStats() {
+      const partCoverage = parseInt(document.getElementById('stats-part-coverage').value, 10);
+      const matchCount = parseInt(document.getElementById('stats-match-count').value, 10);
+      if (!Number.isInteger(partCoverage) || partCoverage < 0 || !Number.isInteger(matchCount) || matchCount < 0) {
+        alert('请输入非负整数'); return;
+      }
+      try {
+        const res = await fetch(API + '/api/admin/stats', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ partCoverage, matchCount })
+        });
+        const json = await res.json();
+        if (!json.success) { alert('保存失败：' + (json.message || '')); return; }
+        closeModal('stats-modal');
+        loadStats();
+      } catch(e) { alert('保存失败'); }
+    }
+
+    // ---- Work Review ----
+    let reviewFilter = 'pending';
+    function setReviewFilter(f) {
+      reviewFilter = f;
+      loadWorkReview();
+    }
+
+    async function loadWorkReview() {
+      const el = document.getElementById('work-review-list');
+      el.innerHTML = '<div class="loading">加载中...</div>';
+      document.querySelectorAll('[data-review-filter]').forEach(b => {
+        b.style.fontWeight = b.dataset.reviewFilter === reviewFilter ? '700' : '400';
+      });
+      try {
+        const res = await fetch(API + '/api/admin/work-review/pending?status=' + reviewFilter + '&limit=50');
+        const json = await res.json();
+        const items = (json.data && json.data.items) || [];
+        if (!items.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+        const badge = { pending: 'badge-warning', approved: 'badge-success', rejected: 'badge-danger' };
+        const label = { pending: '待审', approved: '已通过', rejected: '已拒绝' };
+        el.innerHTML = `<table class="table">
+          <thead><tr><th>ID</th><th>图片</th><th>名称</th><th>简介</th><th>用户</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+          <tbody>${items.map(w => `<tr>
+            <td>${w.id}</td>
+            <td><img src="${esc(w.imageUrl)}" class="img-preview"></td>
+            <td style="max-width:140px;word-break:break-all">${esc(w.name)}</td>
+            <td style="max-width:220px;word-break:break-all">${esc(w.description)}</td>
+            <td style="font-size:12px">${esc(w.userName || '-')}</td>
+            <td><span class="badge ${badge[w.reviewStatus] || 'badge-warning'}">${label[w.reviewStatus] || w.reviewStatus}</span>${w.reviewReason ? `<div style="font-size:11px;color:#e74c3c">${esc(w.reviewReason)}</div>` : ''}</td>
+            <td>${w.createdAt}</td>
+            <td>${w.reviewStatus === 'pending' ? `
+              <button class="btn btn-success" onclick="reviewWork(${w.id}, 'approve')">通过</button>
+              <button class="btn btn-danger" onclick="rejectWork(${w.id})">拒绝</button>` : '-'}
+            </td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+    }
+
+    async function reviewWork(id, action) {
+      try {
+        const res = await fetch(`${API}/api/admin/work-review/${id}/${action}`, { method: 'POST' });
+        const json = await res.json();
+        if (!json.success) { alert('操作失败：' + (json.message || '')); return; }
+        loadWorkReview();
+        refreshReviewBadge();
+      } catch(e) { alert('操作失败'); }
+    }
+
+    async function rejectWork(id) {
+      const reason = prompt('拒绝理由（会展示给作者，可留空）：');
+      if (reason === null) return;
+      try {
+        const res = await fetch(`${API}/api/admin/work-review/${id}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason })
+        });
+        const json = await res.json();
+        if (!json.success) { alert('操作失败：' + (json.message || '')); return; }
+        loadWorkReview();
+        refreshReviewBadge();
+      } catch(e) { alert('操作失败'); }
+    }
+
+    // 红点：待审数量，30s 轮询
+    async function refreshReviewBadge() {
+      const badge = document.getElementById('review-badge');
+      try {
+        const res = await fetch(API + '/api/admin/work-review/pending-count');
+        const json = await res.json();
+        const n = (json.data && json.data.count) || 0;
+        badge.textContent = n > 99 ? '99+' : n;
+        badge.style.display = n > 0 ? 'inline-block' : 'none';
+      } catch(e) { /* 静默失败 */ }
     }
 
     // ---- Inference Model ----
@@ -600,6 +893,7 @@
 
     // Init
     loadModels();
+    refreshReviewBadge();
   </script>
 </body>
 </html>
