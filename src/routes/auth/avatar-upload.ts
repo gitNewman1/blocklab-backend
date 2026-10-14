@@ -52,6 +52,13 @@ export async function avatarUploadRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       try {
+        if (!/multipart\/form-data/i.test(request.headers['content-type'] ?? '')) {
+          return reply.code(400).send({
+            success: false,
+            message: '请使用 multipart/form-data 上传头像（字段名: file）',
+            error: 'MISSING_FILE'
+          });
+        }
         const parts = request.parts();
         let fileBuffer: Buffer | null = null;
         let filename = '';
