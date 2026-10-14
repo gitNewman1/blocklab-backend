@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { Hunyuan3dService } from '../../services/hunyuan3d.service';
+import { requireAuth, optionalAuth } from '../../plugins/auth';
+import { msgSecCheck } from '../../services/wechat.service';
 
 const prisma = new PrismaClient();
 const hunyuan3d = new Hunyuan3dService();
@@ -34,15 +36,15 @@ async function withLiked(works: any[], userId?: string) {
 }
 
 export async function workRoutes(app: FastifyInstance) {
-  // 发布作品
+  // 发布作品（身份从 token 解析；文本机审 → 落库为待审，审核通过才公开）
   app.post('/', {
+    preHandler: requireAuth,
     schema: {
       tags: ['Works'], summary: '发布作品',
       body: {
         type: 'object',
-        required: ['userId', 'imageUrl', 'name', 'description'],
+        required: ['imageUrl', 'name', 'description'],
         properties: {
-          userId:      { type: 'string' },
           imageUrl:    { type: 'string' },
           name:        { type: 'string', maxLength: 100 },
           category:    { type: 'string', default: 'OTHER' },
@@ -50,7 +52,6 @@ export async function workRoutes(app: FastifyInstance) {
           description: { type: 'string' },
           tags:        { type: 'array', items: { type: 'string' }, default: [] },
           generate3d:  { type: 'boolean', default: false },
-          isPublic:    { type: 'boolean', default: true },
           joinContest: { type: 'boolean', default: false }
         }
       }
@@ -58,14 +59,28 @@ export async function workRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     try {
       const body = request.body as any;
-      const user = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } });
-      if (!user) return reply.code(400).send({ success: false, message: 'User not found', error: 'INVALID_USER_ID' });
+      const userId = request.user!.userId;
 
+      // 文本机审（微信 msgSecCheck）：标题/描述/标签拼接送检，命中风险直接拒绝
+      const textToCheck = [body.name, body.description, ...(body.tags ?? [])].filter(Boolean).join('\n');
+      const check = await msgSecCheck(textToCheck);
+      if (check.result === 'risky') {
+        return reply.code(400).send({
+          success: false,
+          message: '作品标题或简介包含违规内容，请修改后重新发布',
+          error: 'CONTENT_REJECTED'
+        });
+      }
+      // check.result === 'error'（审核接口异常）时不阻断发布，落入待审由人工兜底
+
+      // 合规：发布一律先进待审（isPublic 由审核通过时置位，不信任前端）
       const work = await prisma.work.create({ data: {
-        userId: body.userId, imageUrl: body.imageUrl, name: body.name,
+        userId, imageUrl: body.imageUrl, name: body.name,
         category: body.category ?? 'OTHER', partCount: body.partCount ?? null,
         description: body.description, tags: body.tags ?? [],
-        generate3d: body.generate3d ?? false, isPublic: body.isPublic ?? true, joinContest: body.joinContest ?? false,
+        generate3d: body.generate3d ?? false, isPublic: false,
+        reviewStatus: 'pending',
+        joinContest: body.joinContest ?? false,
         hunyuan3dStatus: body.generate3d ? 'pending' : null
       }});
 
@@ -84,14 +99,14 @@ export async function workRoutes(app: FastifyInstance) {
     }
   });
 
-  // 获取作品列表（含点赞数和是否已点赞）
+  // 获取作品列表（含点赞数和是否已点赞；token 可选，登录后能判断是否已点赞）
   app.get('/', {
+    preHandler: optionalAuth,
     schema: {
       tags: ['Works'], summary: '获取作品列表',
       querystring: {
         type: 'object',
         properties: {
-          userId:   { type: 'string', description: '当前用户 ID，用于判断是否已点赞' },
           filterUserId: { type: 'string', description: '按作者 ID 过滤' },
           category: { type: 'string' }
         }
@@ -99,9 +114,11 @@ export async function workRoutes(app: FastifyInstance) {
     }
   }, async (request, reply) => {
     try {
-      const { userId, filterUserId, category } = request.query as any;
+      const { filterUserId, category } = request.query as any;
+      const userId = request.user?.userId;
       const works = await prisma.work.findMany({
         where: {
+          reviewStatus: 'approved',
           ...(filterUserId ? { userId: filterUserId } : {}),
           ...(category ? { category } : {})
         },
@@ -116,16 +133,11 @@ export async function workRoutes(app: FastifyInstance) {
 
   // 我的点赞列表
   app.get('/likes/mine', {
-    schema: {
-      tags: ['Works'], summary: '我点赞的作品列表',
-      querystring: {
-        type: 'object', required: ['userId'],
-        properties: { userId: { type: 'string' } }
-      }
-    }
+    preHandler: requireAuth,
+    schema: { tags: ['Works'], summary: '我点赞的作品列表' }
   }, async (request, reply) => {
     try {
-      const { userId } = request.query as { userId: string };
+      const userId = request.user!.userId;
       const likes = await prisma.workLike.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -145,16 +157,11 @@ export async function workRoutes(app: FastifyInstance) {
 
   // 收到的点赞消息列表
   app.get('/likes/received', {
-    schema: {
-      tags: ['Works'], summary: '收到的点赞消息列表',
-      querystring: {
-        type: 'object', required: ['userId'],
-        properties: { userId: { type: 'string' } }
-      }
-    }
+    preHandler: requireAuth,
+    schema: { tags: ['Works'], summary: '收到的点赞消息列表' }
   }, async (request, reply) => {
     try {
-      const { userId } = request.query as { userId: string };
+      const userId = request.user!.userId;
       const likes = await prisma.workLike.findMany({
         where: { work: { userId } },
         orderBy: { createdAt: 'desc' },
@@ -176,21 +183,17 @@ export async function workRoutes(app: FastifyInstance) {
 
   // 我的作品发布消息列表（含3D任务状态）
   app.get('/messages/publish', {
-    schema: {
-      tags: ['Works'], summary: '我的作品发布消息列表',
-      querystring: {
-        type: 'object', required: ['userId'],
-        properties: { userId: { type: 'string' } }
-      }
-    }
+    preHandler: requireAuth,
+    schema: { tags: ['Works'], summary: '我的作品发布消息列表' }
   }, async (request, reply) => {
     try {
-      const { userId } = request.query as { userId: string };
+      const userId = request.user!.userId;
       const works = await prisma.work.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true, name: true, imageUrl: true, createdAt: true,
+          reviewStatus: true, reviewReason: true,
           generate3d: true, hunyuan3dTaskId: true, hunyuan3dStatus: true, model3dUrl: true
         }
       });
@@ -218,6 +221,8 @@ export async function workRoutes(app: FastifyInstance) {
         success: true, message: 'Publish messages fetched successfully',
         data: works.map(w => ({
           workId: w.id, name: w.name, imageUrl: w.imageUrl, publishedAt: fmtDate(w.createdAt),
+          reviewStatus: w.reviewStatus,
+          reviewReason: w.reviewReason,
           generate3d: w.generate3d,
           hunyuan3dStatus: w.hunyuan3dStatus,
           model3dUrl: w.model3dUrl
@@ -278,17 +283,18 @@ export async function workRoutes(app: FastifyInstance) {
     }
   });
 
-  // 点赞 / 取消点赞
+  // 点赞 / 取消点赞（身份从 token 解析）
   app.post('/:id/like', {
+    preHandler: requireAuth,
     schema: {
       tags: ['Works'], summary: '点赞或取消点赞作品',
       params: { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } },
-      body: { type: 'object', required: ['userId'], properties: { userId: { type: 'string' } } }
+      body: { type: 'object', properties: {} }
     }
   }, async (request, reply) => {
     try {
       const workId = Number((request.params as any).id);
-      const { userId } = request.body as { userId: string };
+      const userId = request.user!.userId;
 
       const work = await prisma.work.findUnique({ where: { id: workId }, select: { id: true } });
       if (!work) return reply.code(404).send({ success: false, message: 'Work not found', error: 'WORK_NOT_FOUND' });
@@ -307,25 +313,28 @@ export async function workRoutes(app: FastifyInstance) {
     }
   });
 
-  // 获取作品详情（含点赞数和是否已点赞）
+  // 获取作品详情（含点赞数和是否已点赞；token 可选）
   app.get('/:id', {
+    preHandler: optionalAuth,
     schema: {
       tags: ['Works'], summary: '获取作品详情',
-      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } },
-      querystring: { type: 'object', properties: { userId: { type: 'string', description: '当前用户 ID' } } }
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } }
     }
   }, async (request, reply) => {
     try {
       const workId = Number((request.params as any).id);
-      const { userId } = request.query as { userId?: string };
+      const userId = request.user?.userId;
       if (!Number.isInteger(workId) || workId <= 0) {
         return reply.code(400).send({ success: false, message: 'id must be a positive integer', error: 'INVALID_ID' });
       }
       const work = await prisma.work.findUnique({
         where: { id: workId },
-        select: { ...workFields, description: true, generate3d: true, hunyuan3dTaskId: true, hunyuan3dStatus: true, model3dUrl: true }
+        select: { ...workFields, reviewStatus: true, reviewReason: true, description: true, generate3d: true, hunyuan3dTaskId: true, hunyuan3dStatus: true, model3dUrl: true }
       });
-      if (!work) return reply.code(404).send({ success: false, message: 'Work not found', error: 'WORK_NOT_FOUND' });
+      // 待审/被拒作品仅作者本人可见，其他人按不存在处理
+      if (!work || (work.reviewStatus !== 'approved' && work.userId !== userId)) {
+        return reply.code(404).send({ success: false, message: 'Work not found', error: 'WORK_NOT_FOUND' });
+      }
 
       // 如果3D任务处理中，查询最新状态
       const w = work as any;
