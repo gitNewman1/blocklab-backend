@@ -78,3 +78,28 @@ Response includes:
 ## Roboflow
 - `ROBOFLOW_API_KEY` is used for Roboflow workflow authentication.
 - `ROBOFLOW_WORKFLOW_URL` must be configured in `.env`.
+
+## Test Environment (服务器上的独立测试实例)
+
+A separate test instance runs alongside production on the same host:
+
+| | Production | Test |
+|---|---|---|
+| Working dir | `/srv/blocklab/backend` (branch `prod`) | `/srv/blocklab/backend-test` (branch `test`) |
+| Branch | `prod` | `test` |
+| Port | 3000 | 3001 |
+| Database | `blocklab` | `blocklab_test` (一次性导入 prod 数据) |
+| Upload root | `/data/blocklab/uploads` | `/srv/blocklab/backend-test/uploads` |
+| Public base URL | `https://api.ai-youtoo.cn/blocklab` | `https://api.ai-youtoo.cn/blocklab-test` |
+| Process manager | pm2 `blocklab-api` (`node dist/server.js`) | pm2 `blocklab-api-test` (`tsx watch`, 改代码自动重载，无需 build) |
+
+Nginx (`/etc/nginx/conf.d/api.ai-youtoo.cn.conf`) strips the `/blocklab-test/` prefix before proxying to port 3001, so the backend code needs no changes. Uploaded files are served back via `/blocklab-test/static/`.
+
+Deploy / update the test instance:
+
+```bash
+cd /srv/blocklab/backend-test
+./deploy-test.sh   # git pull origin test -> prisma db push -> pm2 restart -> health check
+```
+
+Workflow: develop on the `test` branch, verify against the test instance, then merge into `prod`.
