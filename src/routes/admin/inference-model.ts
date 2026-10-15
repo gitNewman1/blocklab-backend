@@ -139,6 +139,56 @@ export async function inferenceModelRoutes(app: FastifyInstance) {
     }
   });
 
+  // 停止推理服务（按需启停环境使用，受 INFERENCE_ALLOW_STOP 控制）
+  app.post('/inference-model/stop', async (request, reply) => {
+    if (process.env.INFERENCE_ALLOW_STOP !== '1') {
+      return reply.code(403).send({ success: false, message: '当前环境不允许停止推理服务' });
+    }
+    try {
+      const { stdout, stderr } = await execFileAsync('pm2', ['stop', INFERENCE_PM2_NAME], {
+        timeout: 30000
+      });
+      if (stderr) request.log.warn({ stderr }, 'pm2 stop stderr');
+      request.log.info(`Inference service "${INFERENCE_PM2_NAME}" stopped`);
+      return reply.send({ success: true, message: '推理服务已停止', data: { output: stdout } });
+    } catch (error: any) {
+      request.log.error(
+        { error: error.message, stderr: error.stderr },
+        'Inference service stop failed'
+      );
+      return reply.code(500).send({
+        success: false,
+        message: `停止失败: ${error.stderr || error.message}`,
+        error: 'STOP_FAILED'
+      });
+    }
+  });
+
+  // 启动推理服务（从 stopped 状态拉起，同样受 INFERENCE_ALLOW_STOP 控制）
+  app.post('/inference-model/start', async (request, reply) => {
+    if (process.env.INFERENCE_ALLOW_STOP !== '1') {
+      return reply.code(403).send({ success: false, message: '当前环境不允许启动推理服务' });
+    }
+    try {
+      const { stdout, stderr } = await execFileAsync('pm2', ['start', INFERENCE_PM2_NAME], {
+        timeout: 30000
+      });
+      if (stderr) request.log.warn({ stderr }, 'pm2 start stderr');
+      request.log.info(`Inference service "${INFERENCE_PM2_NAME}" started`);
+      return reply.send({ success: true, message: '推理服务正在启动，请稍候', data: { output: stdout } });
+    } catch (error: any) {
+      request.log.error(
+        { error: error.message, stderr: error.stderr },
+        'Inference service start failed'
+      );
+      return reply.code(500).send({
+        success: false,
+        message: `启动失败: ${error.stderr || error.message}`,
+        error: 'START_FAILED'
+      });
+    }
+  });
+
   app.get('/inference-model/info', async (request, reply) => {
     try {
       const modelPath = path.join(MODEL_DIR, MODEL_FILENAME);
@@ -148,7 +198,9 @@ export async function inferenceModelRoutes(app: FastifyInstance) {
           success: true,
           data: {
             exists: false,
-            message: '尚未上传推理模型'
+            message: '尚未上传推理模型',
+            allowStop: process.env.INFERENCE_ALLOW_STOP === '1',
+            serviceName: INFERENCE_PM2_NAME
           }
         });
       }
@@ -163,7 +215,9 @@ export async function inferenceModelRoutes(app: FastifyInstance) {
           exists: true,
           fileName: MODEL_FILENAME,
           fileSizeMb: Number(fileSizeMb),
-          modifiedAt
+          modifiedAt,
+          allowStop: process.env.INFERENCE_ALLOW_STOP === '1',
+          serviceName: INFERENCE_PM2_NAME
         }
       });
     } catch (error: any) {
