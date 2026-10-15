@@ -1,5 +1,8 @@
 import { FastifyInstance } from 'fastify';
+import fs from 'fs';
+import path from 'path';
 import { PrismaClient } from '@prisma/client';
+import { config } from '../../config';
 import { LocalStorageService } from '../../services/local-storage.service';
 import { IOParserService } from '../../services/io-parser.service';
 import { RebrickableService } from '../../services/rebrickable.service';
@@ -257,6 +260,22 @@ export async function modelsRoutes(app: FastifyInstance) {
       const model = await prisma.model.findUnique({ where: { id }, select: { ioFileUrl: true, model3dUrl: true, thumbnailUrl: true, manualUrl: true } });
       if (!model) return reply.code(404).send({ success: false, message: 'Model not found', error: 'MODEL_NOT_FOUND' });
       await prisma.model.delete({ where: { id } });
+
+      // 删除模型关联的磁盘文件（io/glb/缩略图/说明书 + 拼装动画 assembly_{id}.glb）。
+      // 文件删除失败不阻断删库流程，仅记录告警。
+      try {
+        await storageService.deleteFilesByUrls([
+          model.ioFileUrl,
+          model.model3dUrl,
+          model.thumbnailUrl,
+          model.manualUrl
+        ]);
+        const assemblyPath = path.join(config.storage.uploadRoot, 'parts', `assembly_${id}.glb`);
+        await fs.promises.rm(assemblyPath, { force: true });
+      } catch (fileError: any) {
+        request.log.warn({ error: fileError.message, modelId: id }, 'Model files cleanup failed after delete');
+      }
+
       return reply.send({ success: true, message: 'Model deleted' });
     } catch (error: any) {
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
