@@ -489,7 +489,8 @@
     }
 
     // ---- 分步动画（io → assembly glb），调用操作者本机的 generator-server ----
-    const DEFAULT_ASSEMBLY_UPLOAD_SERVER = 'https://api.ai-youtoo.cn/blocklab';
+    // 转存地址跟随当前页面环境（生产 /blocklab、测试 /blocklab-test），避免测试环境误传到生产
+    const DEFAULT_ASSEMBLY_UPLOAD_SERVER = location.origin + API;
 
     function getAssemblyServer() {
       return (document.getElementById('assembly-server').value || '').replace(/\/+$/, '');
