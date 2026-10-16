@@ -45,6 +45,13 @@
     .img-preview { max-width: 100px; max-height: 100px; object-fit: cover; border-radius: 4px; }
     .section { display: none; }
     .section.active { display: block; }
+    .btn:disabled { opacity: .6; cursor: not-allowed; }
+    .btn .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; margin-right: 6px; vertical-align: -1px; animation: btn-spin .8s linear infinite; }
+    @keyframes btn-spin { to { transform: rotate(360deg); } }
+    .upload-progress { margin-top: 12px; }
+    .upload-progress .bar-wrap { background: #ecf0f1; border-radius: 4px; height: 16px; overflow: hidden; }
+    .upload-progress .bar { width: 0%; height: 100%; background: #3498db; transition: width .3s; }
+    .upload-progress .text { text-align: center; margin-top: 6px; color: #888; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -243,9 +250,13 @@
         <label>详情图（可多选）</label>
         <input type="file" id="rec-details" accept="image/*" multiple>
       </div>
+      <div id="rec-upload-progress" class="upload-progress" style="display:none;">
+        <div class="bar-wrap"><div id="rec-upload-bar" class="bar"></div></div>
+        <p id="rec-upload-status" class="text">上传中 0%</p>
+      </div>
       <div class="form-actions">
         <button class="btn" onclick="closeModal('recommended-modal')">取消</button>
-        <button class="btn btn-primary" onclick="submitRecommended()">确认</button>
+        <button class="btn btn-primary" id="rec-upload-btn" onclick="submitRecommended()">确认</button>
       </div>
     </div>
   </div>
@@ -286,9 +297,13 @@
         <p style="color:#888;font-size:12px;margin-top:4px;">服务没启动？在这台电脑上<a href="setup-generator-autostart.bat" download>下载看门狗自启脚本</a>，双击运行一次即可：配置开机自启 + 每 5 分钟自动检测、掉线自动拉起，之后打开本后台服务永远就绪。<a href="guide/generator-server-setup.html" style="color:#3498db;">详细说明</a></p>
         <p id="assembly-status" style="font-size:12px;margin-top:4px;"></p>
       </div>
+      <div id="model-upload-progress" class="upload-progress" style="display:none;">
+        <div class="bar-wrap"><div id="model-upload-bar" class="bar"></div></div>
+        <p id="model-upload-status" class="text">上传中 0%</p>
+      </div>
       <div class="form-actions">
         <button class="btn" onclick="closeModal('model-modal')">取消</button>
-        <button class="btn btn-primary" onclick="submitModel()">上传</button>
+        <button class="btn btn-primary" id="model-upload-btn" onclick="submitModel()">上传</button>
       </div>
     </div>
   </div>
@@ -430,7 +445,50 @@
       document.getElementById('model-modal').classList.add('show');
     }
 
+    function setBtnLoading(btn, loading, text) {
+      if (loading) {
+        btn.dataset.label = btn.textContent;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>' + (text || '处理中...');
+      } else {
+        btn.disabled = false;
+        btn.textContent = text || btn.dataset.label || '确认';
+      }
+    }
+
+    function setUploadProgress(prefix, pct) {
+      document.getElementById(prefix + '-upload-progress').style.display = 'block';
+      document.getElementById(prefix + '-upload-bar').style.width = pct + '%';
+      document.getElementById(prefix + '-upload-status').textContent = '上传中 ' + pct + '%';
+    }
+
+    function resetUploadProgress(prefix) {
+      document.getElementById(prefix + '-upload-progress').style.display = 'none';
+      document.getElementById(prefix + '-upload-bar').style.width = '0%';
+    }
+
+    // 用 XHR 替代 fetch，以获得上传进度回调；成功时 resolve 解析后的 JSON
+    function uploadJsonWithProgress(url, fd, onProgress) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        if (onProgress) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+          };
+        }
+        xhr.onload = () => {
+          try { resolve(JSON.parse(xhr.responseText)); }
+          catch (_) { reject(new Error('HTTP ' + xhr.status)); }
+        };
+        xhr.onerror = () => reject(new Error('网络错误'));
+        xhr.send(fd);
+      });
+    }
+
+    let modelSubmitting = false;
     async function submitModel() {
+      if (modelSubmitting) return;
       const name = document.getElementById('model-name').value.trim();
       const typeId = document.getElementById('model-type-select').value;
       const ioFile = document.getElementById('model-io').files[0];
@@ -443,24 +501,27 @@
       fd.append('io_file', ioFile);
       if (glbFile) fd.append('glb_file', glbFile);
       fd.append('manual_file', manualFile);
-      let modelData = null;
+      const btn = document.getElementById('model-upload-btn');
+      modelSubmitting = true;
+      setBtnLoading(btn, true, '上传中...');
       try {
-        const res = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
-        const json = await res.json();
+        const send = () => uploadJsonWithProgress(API + '/api/admin/models/upload', fd, p => setUploadProgress('model', p));
+        let modelData = null;
+        let json = await send();
         if (json.error === 'DUPLICATE_MODEL_NAME') {
+          resetUploadProgress('model');
           if (!confirm(`模型名称已存在(${json.data.existingCount}个)，是否继续？`)) return;
           fd.append('confirm_duplicate', 'true');
-          const res2 = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
-          const json2 = await res2.json();
-          if (!json2.success) return alert(json2.message || '上传失败');
-          modelData = json2.data;
+          json = await send();
+          if (!json.success) return alert(json.message || '上传失败');
+          modelData = json.data;
         } else if (json.error === 'DUPLICATE_PARTS_MATCH') {
+          resetUploadProgress('model');
           if (!confirm(`存在相同零件组合的模型(${json.data.matchedCount}个)，是否继续？`)) return;
           fd.append('confirm_exact_match', 'true');
-          const res2 = await fetch(API + '/api/admin/models/upload', { method: 'POST', body: fd });
-          const json2 = await res2.json();
-          if (!json2.success) return alert(json2.message || '上传失败');
-          modelData = json2.data;
+          json = await send();
+          if (!json.success) return alert(json.message || '上传失败');
+          modelData = json.data;
         } else if (json.success) {
           modelData = json.data;
         } else {
@@ -486,6 +547,11 @@
         closeModal('model-modal');
         loadModels();
       } catch(e) { alert('请求失败: ' + e.message); }
+      finally {
+        modelSubmitting = false;
+        setBtnLoading(btn, false, '上传');
+        resetUploadProgress('model');
+      }
     }
 
     // ---- 分步动画（io → assembly glb），调用操作者本机的 generator-server ----
@@ -570,7 +636,9 @@
       document.getElementById('recommended-modal').classList.add('show');
     }
 
+    let recommendedSubmitting = false;
     async function submitRecommended() {
+      if (recommendedSubmitting) return;
       const fd = new FormData();
       fd.append('set_number', document.getElementById('rec-set-number').value.trim());
       fd.append('name', document.getElementById('rec-name').value.trim());
@@ -585,13 +653,20 @@
       fd.append('cover_image', cover);
       fd.append('display_image', display);
       Array.from(document.getElementById('rec-details').files).forEach(f => fd.append('detail_images', f));
+      const btn = document.getElementById('rec-upload-btn');
+      recommendedSubmitting = true;
+      setBtnLoading(btn, true, '上传中...');
       try {
-        const res = await fetch(API + '/api/admin/recommended-models/upload', { method: 'POST', body: fd });
-        const json = await res.json();
+        const json = await uploadJsonWithProgress(API + '/api/admin/recommended-models/upload', fd, p => setUploadProgress('rec', p));
         if (!json.success) return alert(json.message || '上传失败');
         closeModal('recommended-modal');
         loadRecommended();
       } catch(e) { alert('请求失败'); }
+      finally {
+        recommendedSubmitting = false;
+        setBtnLoading(btn, false, '确认');
+        resetUploadProgress('rec');
+      }
     }
 
     async function deleteRecommended(id) {
