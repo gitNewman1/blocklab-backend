@@ -294,7 +294,7 @@
           <button class="btn" onclick="checkAssemblyEnv()">检测环境</button>
         </div>
         <p style="color:#888;font-size:12px;margin-top:4px;">模型上传成功后会自动调用本机生成服务把 .io 转成带分步动画的 assembly_{模型ID}.glb 并上传；生成失败不影响模型本身。请用运行了 generator-server 的电脑打开本页（建议通过 http://IP/admin.html 访问，HTTPS 页面会被浏览器拦截对本机服务的请求）。</p>
-        <p style="color:#888;font-size:12px;margin-top:4px;">服务没启动？在这台电脑上<a href="setup-generator-autostart.bat" download>下载看门狗自启脚本</a>，双击运行一次即可：配置开机自启 + 每 5 分钟自动检测、掉线自动拉起，之后打开本后台服务永远就绪。<a href="guide/generator-server-setup.html" style="color:#3498db;">详细说明</a></p>
+        <p style="color:#888;font-size:12px;margin-top:4px;">服务没启动？在这台电脑上<a href="setup-generator-autostart.bat" download>下载一键启动脚本</a>，双击运行一次即可：自动在本机启动生成服务并检测就绪（服务窗口需保持开着，关窗口或重启电脑后需重新运行本脚本）。<a href="guide/generator-server-setup.html" style="color:#3498db;">详细说明</a></p>
         <p id="assembly-status" style="font-size:12px;margin-top:4px;"></p>
       </div>
       <div id="model-upload-progress" class="upload-progress" style="display:none;">
