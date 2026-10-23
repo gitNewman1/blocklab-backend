@@ -13,9 +13,20 @@ const storageService = new LocalStorageService();
 const ioParserService = new IOParserService();
 const rebrickableService = new RebrickableService();
 const allowedManualExts = new Set(['.pdf']);
+// 积木模型上传开关：显式 env 控制（同 INFERENCE_ALLOW_STOP 模式）。
+// 生产 .env 不配置即禁用；测试 .env 配 ALLOW_MODEL_UPLOAD=1；生产临时开放可加此配置后重启。
+const ALLOW_MODEL_UPLOAD = process.env.ALLOW_MODEL_UPLOAD === '1';
 
 export async function modelsRoutes(app: FastifyInstance) {
+  // 上传权限查询：前端据此显示/隐藏「+ 添加模型」按钮
+  app.get('/upload-permission', async () => {
+    return { success: true, data: { allowUpload: ALLOW_MODEL_UPLOAD } };
+  });
+
   app.post('/upload', async (request, reply) => {
+    if (!ALLOW_MODEL_UPLOAD) {
+      return reply.code(403).send({ success: false, message: '当前环境不允许上传积木模型', error: 'UPLOAD_DISABLED' });
+    }
     try {
       request.log.info('Start processing model upload request');
 
@@ -206,6 +217,9 @@ export async function modelsRoutes(app: FastifyInstance) {
   });
 
   app.post('/create', async (request, reply) => {
+    if (!ALLOW_MODEL_UPLOAD) {
+      return reply.code(403).send({ success: false, message: '当前环境不允许上传积木模型', error: 'UPLOAD_DISABLED' });
+    }
     try {
       const body = (request.body || {}) as Record<string, unknown>;
       const name = typeof body.name === 'string' ? body.name.trim() : '';

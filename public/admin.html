@@ -72,7 +72,7 @@
       <div id="models-section" class="section active">
         <div class="header">
           <h2>模型管理</h2>
-          <button class="btn btn-primary" onclick="showAddModel()">+ 添加模型</button>
+          <button class="btn btn-primary" id="add-model-btn" onclick="showAddModel()">+ 添加模型</button>
         </div>
         <div class="card">
           <div id="models-list" class="loading">加载中...</div>
@@ -409,10 +409,15 @@
     }
 
     // ---- Models ----
+    let allowModelUpload = true; // 上传权限，由 permission 接口刷新；禁止时隐藏「+ 添加模型」按钮
     async function loadModels() {
       const el = document.getElementById('models-list');
       el.innerHTML = '<div class="loading">加载中...</div>';
       try {
+        fetch(API + '/api/admin/models/upload-permission').then(r => r.json()).then(json => {
+          allowModelUpload = !!(json.data && json.data.allowUpload);
+          document.getElementById('add-model-btn').style.display = allowModelUpload ? '' : 'none';
+        }).catch(() => { /* 查询失败保持默认显示，后端 403 兜底 */ });
         const res = await fetch(API + '/api/models');
         const json = await res.json();
         const models = json.data || [];
@@ -433,6 +438,7 @@
     }
 
     async function showAddModel() {
+      if (allowModelUpload === false) return alert('当前环境不允许上传积木模型');
       const res = await fetch(API + '/api/model-types');
       const json = await res.json();
       const sel = document.getElementById('model-type-select');
