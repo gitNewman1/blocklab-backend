@@ -413,6 +413,7 @@
 
     // ---- Models ----
     let allowModelUpload = true; // 上传权限，由 permission 接口刷新；禁止时隐藏「+ 添加模型」按钮
+    let allowSync = false; // 同步功能开关：permission 接口返回；false 时不渲染同步列、不请求台账
     let currentModels = []; // 最近一次加载的模型列表，供批量同步使用
     let checkedSyncIds = new Set(); // 已勾选待批量同步的模型 ID
     async function loadModels() {
@@ -420,30 +421,36 @@
       const el = document.getElementById('models-list');
       el.innerHTML = '<div class="loading">加载中...</div>';
       try {
-        fetch(API + '/api/admin/models/upload-permission').then(r => r.json()).then(json => {
-          allowModelUpload = !!(json.data && json.data.allowUpload);
-          document.getElementById('add-model-btn').style.display = allowModelUpload ? '' : 'none';
-        }).catch(() => { /* 查询失败保持默认显示，后端 403 兜底 */ });
-        // 同步状态：读取 synced_models 台账（晋级脚本维护），本地比对 ID
-        let syncedIds = null; // null = 台账接口查询失败，不显示状态
         try {
-          const sres = await fetch(API + '/api/admin/models/synced-ids');
-          const sjson = await sres.json();
-          syncedIds = new Set(sjson.data ? sjson.data.ids : []);
-        } catch (e) { /* 台账不可用时降级为不显示 */ }
+          const pres = await fetch(API + '/api/admin/models/upload-permission');
+          const pjson = await pres.json();
+          allowModelUpload = !!(pjson.data && pjson.data.allowUpload);
+          allowSync = !!(pjson.data && pjson.data.allowSync);
+          document.getElementById('add-model-btn').style.display = allowModelUpload ? '' : 'none';
+        } catch (e) { /* 查询失败保持默认显示，后端 403 兜底 */ }
+        // 同步状态：读取 synced_models 台账（晋级接口维护），本地比对 ID；未启用时整列不渲染
+        let syncedIds = null; // null = 同步功能未启用或台账接口查询失败，不显示状态
+        if (allowSync) {
+          try {
+            const sres = await fetch(API + '/api/admin/models/synced-ids');
+            const sjson = await sres.json();
+            syncedIds = sjson.success && sjson.data ? new Set(sjson.data.ids) : null;
+          } catch (e) { /* 台账不可用时降级为不显示 */ }
+        }
         const res = await fetch(API + '/api/models');
         const json = await res.json();
         const models = currentModels = json.data || [];
         if (!models.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
-        // 同步列（操作列之后）：已同步显示徽标；未同步显示勾选框+「同步」按钮，不再显示未同步提示
+        // 同步列仅在同步功能启用且台账可读时渲染；未同步行显示勾选框+「同步」按钮，已同步显示徽标
+        const showSyncCol = allowSync && syncedIds !== null;
         const syncCell = m => {
-          if (syncedIds === null) return '-';
+          if (!showSyncCol) return '';
           if (syncedIds.has(m.id)) return '<span class="badge badge-success">已同步</span>';
           return `<input type="checkbox" ${checkedSyncIds.has(m.id) ? 'checked' : ''} onchange="toggleSyncSel(${m.id}, this.checked)" style="vertical-align:middle;">
             <button class="btn btn-primary" style="padding:2px 10px;font-size:12px;margin-left:4px;" onclick="syncModels([${m.id}], this)">同步</button>`;
         };
-        // 批量同步按钮：存在未同步模型时显示，文字随勾选数变化，未勾选时置灰
-        const unsyncedCount = syncedIds === null ? 0 : models.filter(m => !syncedIds.has(m.id)).length;
+        // 批量同步按钮：同步功能启用且存在未同步模型时显示，文字随勾选数变化，未勾选时置灰
+        const unsyncedCount = showSyncCol ? models.filter(m => !syncedIds.has(m.id)).length : 0;
         const syncAllBtn = document.getElementById('sync-all-btn');
         if (syncAllBtn) {
           syncAllBtn.style.display = unsyncedCount > 0 ? '' : 'none';
@@ -451,7 +458,7 @@
           syncAllBtn.disabled = checkedSyncIds.size === 0;
         }
         el.innerHTML = `<table class="table">
-          <thead><tr><th>ID</th><th>缩略图</th><th>名称</th><th>零件数</th><th>分类</th><th>创建时间</th><th>操作</th><th>同步</th></tr></thead>
+          <thead><tr><th>ID</th><th>缩略图</th><th>名称</th><th>零件数</th><th>分类</th><th>创建时间</th><th>操作</th>${showSyncCol ? '<th>同步</th>' : ''}</tr></thead>
           <tbody>${models.map(m => `<tr>
             <td>${m.id}</td>
             <td>${m.thumbnailUrl ? `<img src="${m.thumbnailUrl}" class="img-preview">` : '-'}</td>
@@ -460,7 +467,7 @@
             <td>${m.modelTypeName || '-'}</td>
             <td>${new Date(m.createdAt).toLocaleString()}</td>
             <td><button class="btn btn-danger" onclick="deleteModel(${m.id})">删除</button></td>
-            <td>${syncCell(m)}</td>
+            ${showSyncCol ? `<td>${syncCell(m)}</td>` : ''}
           </tr>`).join('')}</tbody>
         </table>`;
       } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }

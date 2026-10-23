@@ -18,6 +18,7 @@ let prodPrisma: PrismaClient | null = null;
 // - 不删任何文件、不改测试侧任何 URL；生产行 URL 前缀按环境重写；
 // - 成功后写测试库 synced_models 台账。
 const PROD_DATABASE_URL = process.env.PROMOTE_DATABASE_URL || '';
+export { PROD_DATABASE_URL };
 
 function getProdPrisma(): PrismaClient | null {
   if (!PROD_DATABASE_URL) return null;

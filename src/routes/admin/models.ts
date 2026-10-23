@@ -7,7 +7,7 @@ import { LocalStorageService } from '../../services/local-storage.service';
 import { IOParserService } from '../../services/io-parser.service';
 import { RebrickableService } from '../../services/rebrickable.service';
 import { Part, UploadedFile } from '../../types';
-import { getProdPrisma } from './sync';
+import { getProdPrisma, PROD_DATABASE_URL } from './sync';
 
 const prisma = new PrismaClient();
 const storageService = new LocalStorageService();
@@ -19,16 +19,27 @@ const allowedManualExts = new Set(['.pdf']);
 const ALLOW_MODEL_UPLOAD = process.env.ALLOW_MODEL_UPLOAD === '1';
 
 export async function modelsRoutes(app: FastifyInstance) {
-  // 上传权限查询：前端据此显示/隐藏「+ 添加模型」按钮
+  // 上传权限查询：前端据此显示/隐藏「+ 添加模型」按钮。
+  // allowSync：同步功能开关（配置了 PROMOTE_DATABASE_URL 才开放），前端据此决定是否渲染同步列
   app.get('/upload-permission', async () => {
-    return { success: true, data: { allowUpload: ALLOW_MODEL_UPLOAD } };
+    return { success: true, data: { allowUpload: ALLOW_MODEL_UPLOAD, allowSync: !!PROD_DATABASE_URL } };
   });
 
   // 已晋级模型 ID 集合（来自 synced_models 台账，由晋级接口维护）。
   // 实时对账：与生产库模型 ID 比对，台账中生产已不存在的行自动清理（A1 策略），
   // 使台账始终如实反映「当前存在于生产」；生产库不可用或未配置连接时降级为台账原值。
-  app.get('/synced-ids', async () => {
-    let ids = (await prisma.syncedModels.findMany()).map(r => r.modelId);
+  app.get('/synced-ids', async (_request, reply) => {
+    // 未配置生产库连接（如生产环境、且无 synced_models 表）时直接报告未启用
+    if (!PROD_DATABASE_URL) {
+      return reply.code(403).send({ success: false, message: '同步功能未启用', error: 'SYNC_DISABLED' });
+    }
+    let ids: number[];
+    try {
+      ids = (await prisma.syncedModels.findMany()).map(r => r.modelId);
+    } catch (err: any) {
+      app.log.warn({ error: err.message }, 'synced-ids 读取台账失败');
+      return reply.code(500).send({ success: false, message: err.message, error: 'INTERNAL_ERROR' });
+    }
     const prod = getProdPrisma();
     if (prod) {
       try {
