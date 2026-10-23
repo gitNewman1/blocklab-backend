@@ -435,14 +435,13 @@
         const json = await res.json();
         const models = currentModels = json.data || [];
         if (!models.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+        // 同步列（操作列之后）：已同步显示徽标；未同步显示勾选框+「同步」按钮，不再显示未同步提示
         const syncCell = m => {
           if (syncedIds === null) return '-';
           if (syncedIds.has(m.id)) return '<span class="badge badge-success">已同步</span>';
-          return `<span class="badge badge-warning">未同步</span> <button class="btn btn-primary" style="padding:2px 10px;font-size:12px;margin-left:4px;" onclick="syncModels([${m.id}], this)">同步</button>`;
+          return `<input type="checkbox" ${checkedSyncIds.has(m.id) ? 'checked' : ''} onchange="toggleSyncSel(${m.id}, this.checked)" style="vertical-align:middle;">
+            <button class="btn btn-primary" style="padding:2px 10px;font-size:12px;margin-left:4px;" onclick="syncModels([${m.id}], this)">同步</button>`;
         };
-        const checkCell = m => syncedIds !== null && !syncedIds.has(m.id)
-          ? `<input type="checkbox" ${checkedSyncIds.has(m.id) ? 'checked' : ''} onchange="toggleSyncSel(${m.id}, this.checked)">`
-          : '';
         // 批量同步按钮：存在未同步模型时显示，文字随勾选数变化，未勾选时置灰
         const unsyncedCount = syncedIds === null ? 0 : models.filter(m => !syncedIds.has(m.id)).length;
         const syncAllBtn = document.getElementById('sync-all-btn');
@@ -452,17 +451,16 @@
           syncAllBtn.disabled = checkedSyncIds.size === 0;
         }
         el.innerHTML = `<table class="table">
-          <thead><tr><th style="width:36px;"></th><th>ID</th><th>缩略图</th><th>名称</th><th>零件数</th><th>分类</th><th>同步状态</th><th>创建时间</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>缩略图</th><th>名称</th><th>零件数</th><th>分类</th><th>创建时间</th><th>操作</th><th>同步</th></tr></thead>
           <tbody>${models.map(m => `<tr>
-            <td>${checkCell(m)}</td>
             <td>${m.id}</td>
             <td>${m.thumbnailUrl ? `<img src="${m.thumbnailUrl}" class="img-preview">` : '-'}</td>
             <td>${m.name}</td>
             <td>${m.partCount}</td>
             <td>${m.modelTypeName || '-'}</td>
-            <td>${syncCell(m)}</td>
             <td>${new Date(m.createdAt).toLocaleString()}</td>
             <td><button class="btn btn-danger" onclick="deleteModel(${m.id})">删除</button></td>
+            <td>${syncCell(m)}</td>
           </tr>`).join('')}</tbody>
         </table>`;
       } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
