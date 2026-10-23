@@ -4,6 +4,7 @@ import multipart from '@fastify/multipart';
 import staticFiles from '@fastify/static';
 import path from 'path';
 import { modelsRoutes } from './routes/admin/models';
+import { modelSyncRoutes } from './routes/admin/sync';
 import { recommendedModelsRoutes } from './routes/admin/recommended-models';
 import { dataManagementRoutes } from './routes/admin/data-management';
 import { partsRoutes } from './routes/admin/parts';
@@ -54,6 +55,7 @@ export async function buildApp() {
   });
 
   await app.register(modelsRoutes, { prefix: '/api/admin/models' });
+  await app.register(modelSyncRoutes, { prefix: '/api/admin/models' });
   await app.register(recommendedModelsRoutes, { prefix: '/api/admin/recommended-models' });
   await app.register(dataManagementRoutes, { prefix: '/api/admin/data' });
   await app.register(partsRoutes, { prefix: '/api/admin/parts' });

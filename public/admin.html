@@ -72,7 +72,10 @@
       <div id="models-section" class="section active">
         <div class="header">
           <h2>模型管理</h2>
-          <button class="btn btn-primary" id="add-model-btn" onclick="showAddModel()">+ 添加模型</button>
+          <div>
+            <button class="btn" id="sync-all-btn" style="display:none;margin-right:8px;" onclick="syncUnsyncedModels()">批量同步未同步模型</button>
+            <button class="btn btn-primary" id="add-model-btn" onclick="showAddModel()">+ 添加模型</button>
+          </div>
         </div>
         <div class="card">
           <div id="models-list" class="loading">加载中...</div>
@@ -410,6 +413,7 @@
 
     // ---- Models ----
     let allowModelUpload = true; // 上传权限，由 permission 接口刷新；禁止时隐藏「+ 添加模型」按钮
+    let currentModels = []; // 最近一次加载的模型列表，供批量同步使用
     async function loadModels() {
       const el = document.getElementById('models-list');
       el.innerHTML = '<div class="loading">加载中...</div>';
@@ -427,11 +431,20 @@
         } catch (e) { /* 台账不可用时降级为不显示 */ }
         const res = await fetch(API + '/api/models');
         const json = await res.json();
-        const models = json.data || [];
+        const models = currentModels = json.data || [];
         if (!models.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
-        const syncCell = m => syncedIds === null ? '-' : (syncedIds.has(m.id)
-          ? '<span class="badge badge-success">已同步</span>'
-          : '<span class="badge badge-warning">未同步</span>');
+        const syncCell = m => {
+          if (syncedIds === null) return '-';
+          if (syncedIds.has(m.id)) return '<span class="badge badge-success">已同步</span>';
+          return `<span class="badge badge-warning">未同步</span> <button class="btn btn-primary" style="padding:2px 10px;font-size:12px;margin-left:4px;" onclick="syncModels([${m.id}], this)">同步</button>`;
+        };
+        // 批量同步按钮：存在未同步模型时显示
+        const unsyncedCount = syncedIds === null ? 0 : models.filter(m => !syncedIds.has(m.id)).length;
+        const syncAllBtn = document.getElementById('sync-all-btn');
+        if (syncAllBtn) {
+          syncAllBtn.style.display = unsyncedCount > 0 ? '' : 'none';
+          syncAllBtn.textContent = `批量同步未同步模型(${unsyncedCount})`;
+        }
         el.innerHTML = `<table class="table">
           <thead><tr><th>ID</th><th>缩略图</th><th>名称</th><th>零件数</th><th>分类</th><th>同步状态</th><th>创建时间</th><th>操作</th></tr></thead>
           <tbody>${models.map(m => `<tr>
@@ -446,6 +459,36 @@
           </tr>`).join('')}</tbody>
         </table>`;
       } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+    }
+
+    // 同步模型到生产环境（单个传 [id]，批量传 ID 数组）
+    async function syncModels(ids, btn) {
+      const label = ids.length === 1 ? `同步模型 #${ids[0]}` : `批量同步 ${ids.length} 个模型`;
+      if (!confirm(`确认将 ${label} 晋级到生产环境？\n该操作会硬链接文件并写入生产库，请确认已通过测试验证。`)) return;
+      if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>同步中'; }
+      try {
+        const res = await fetch(API + '/api/admin/models/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids })
+        });
+        const json = await res.json();
+        if (!json.data || !json.data.results) throw new Error(json.message || '请求失败');
+        const lines = json.data.results.map(r => `#${r.id}: ${r.ok ? '✓' : '✗'} ${r.message}`);
+        alert(`${label}完成：\n${lines.join('\n')}`);
+      } catch (e) {
+        alert('同步请求失败: ' + (e.message || e));
+      } finally {
+        loadModels();
+      }
+    }
+
+    // 批量同步全部未同步模型
+    async function syncUnsyncedModels() {
+      if (syncedIds === null) return alert('同步状态不可用，无法批量同步');
+      const ids = currentModels.filter(m => !syncedIds.has(m.id)).map(m => m.id);
+      if (!ids.length) return alert('没有未同步的模型');
+      syncModels(ids, document.getElementById('sync-all-btn'));
     }
 
     async function showAddModel() {
