@@ -29,6 +29,8 @@ function getProdPrisma(): PrismaClient | null {
   return prodPrisma;
 }
 
+export { getProdPrisma };
+
 const TEST_UPLOAD_ROOT = config.storage.uploadRoot; // /data/blocklab-test/uploads
 const PROD_UPLOAD_ROOT = TEST_UPLOAD_ROOT.includes('blocklab-test')
   ? TEST_UPLOAD_ROOT.replace('blocklab-test', 'blocklab')

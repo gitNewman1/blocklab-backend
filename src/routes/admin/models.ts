@@ -7,6 +7,7 @@ import { LocalStorageService } from '../../services/local-storage.service';
 import { IOParserService } from '../../services/io-parser.service';
 import { RebrickableService } from '../../services/rebrickable.service';
 import { Part, UploadedFile } from '../../types';
+import { getProdPrisma } from './sync';
 
 const prisma = new PrismaClient();
 const storageService = new LocalStorageService();
@@ -23,11 +24,25 @@ export async function modelsRoutes(app: FastifyInstance) {
     return { success: true, data: { allowUpload: ALLOW_MODEL_UPLOAD } };
   });
 
-  // 已晋级模型 ID 集合（来自 synced_models 台账，由晋级脚本维护）；
-  // 后台模型列表据此显示同步状态，失败时前端降级为不显示状态列
+  // 已晋级模型 ID 集合（来自 synced_models 台账，由晋级接口维护）。
+  // 实时对账：与生产库模型 ID 比对，台账中生产已不存在的行自动清理（A1 策略），
+  // 使台账始终如实反映「当前存在于生产」；生产库不可用或未配置连接时降级为台账原值。
   app.get('/synced-ids', async () => {
-    const rows = await prisma.syncedModels.findMany();
-    return { success: true, data: { ids: rows.map(r => r.modelId) } };
+    let ids = (await prisma.syncedModels.findMany()).map(r => r.modelId);
+    const prod = getProdPrisma();
+    if (prod) {
+      try {
+        const prodIds = new Set((await prod.model.findMany({ select: { id: true } })).map(m => m.id));
+        const stale = ids.filter(id => !prodIds.has(id));
+        if (stale.length) {
+          await prisma.syncedModels.deleteMany({ where: { modelId: { in: stale } } });
+          ids = ids.filter(id => prodIds.has(id));
+        }
+      } catch (err: any) {
+        app.log.warn({ error: err.message }, 'synced-ids 对账失败，返回台账原值');
+      }
+    }
+    return { success: true, data: { ids } };
   });
 
   app.post('/upload', async (request, reply) => {
