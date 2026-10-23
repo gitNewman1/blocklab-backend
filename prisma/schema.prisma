@@ -131,3 +131,12 @@ model ModelType {
   @@map("model_types")
   @@index([createdAt(sort: Desc)])
 }
+
+// 积木模型晋级台账（仅测试库使用）：记录哪些模型 ID 已晋级到生产库。
+// 写入方：晋级脚本（未落地前为一次性手工初始化）；admin 接口据此返回 synced 字段。
+model SyncedModels {
+  modelId  Int      @id @map("model_id")
+  syncedAt DateTime @default(now()) @map("synced_at")
+
+  @@map("synced_models")
+}

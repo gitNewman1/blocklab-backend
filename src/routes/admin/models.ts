@@ -23,6 +23,13 @@ export async function modelsRoutes(app: FastifyInstance) {
     return { success: true, data: { allowUpload: ALLOW_MODEL_UPLOAD } };
   });
 
+  // 已晋级模型 ID 集合（来自 synced_models 台账，由晋级脚本维护）；
+  // 后台模型列表据此显示同步状态，失败时前端降级为不显示状态列
+  app.get('/synced-ids', async () => {
+    const rows = await prisma.syncedModels.findMany();
+    return { success: true, data: { ids: rows.map(r => r.modelId) } };
+  });
+
   app.post('/upload', async (request, reply) => {
     if (!ALLOW_MODEL_UPLOAD) {
       return reply.code(403).send({ success: false, message: '当前环境不允许上传积木模型', error: 'UPLOAD_DISABLED' });
