@@ -292,12 +292,7 @@
       </div>
       <div class="form-group">
         <label>分步动画生成（.io → assembly_{ID}.glb）</label>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input type="text" id="assembly-server" style="flex:1" value="http://127.0.0.1:5177" placeholder="本机生成服务地址">
-          <button class="btn" onclick="checkAssemblyEnv()">检测环境</button>
-        </div>
-        <p style="color:#888;font-size:12px;margin-top:4px;">模型上传成功后会自动调用本机生成服务把 .io 转成带分步动画的 assembly_{模型ID}.glb 并上传；生成失败不影响模型本身。请用运行了 generator-server 的电脑打开本页（建议通过 http://IP/admin.html 访问，HTTPS 页面会被浏览器拦截对本机服务的请求）。</p>
-        <p style="color:#888;font-size:12px;margin-top:4px;">服务没启动？在这台电脑上<a href="setup-generator-autostart.bat" download>下载一键启动脚本</a>，双击运行一次即可：自动在本机启动生成服务并检测就绪（服务窗口需保持开着，关窗口或重启电脑后需重新运行本脚本）。<a href="guide/generator-server-setup.html" style="color:#3498db;">详细说明</a></p>
+        <p style="color:#888;font-size:12px;margin-top:4px;">服务器端生成模式：模型上传成功后由服务器自动把 .io 转成带分步动画的 assembly_{模型ID}.glb 并落到静态目录；生成失败不影响模型本身。生成服务按需启动，空闲 30 分钟自动停止，无需在本机运行任何程序。</p>
         <p id="assembly-status" style="font-size:12px;margin-top:4px;"></p>
       </div>
       <div id="model-upload-progress" class="upload-progress" style="display:none;">
@@ -621,7 +616,7 @@
           try {
             const asm = await generateAssemblyFromIoFile(ioFile, modelData.id);
             const r = asm.data || {};
-            asmMsg = `分步动画：已${r.uploaded ? '上传 ' + r.url : '生成 ' + r.glbPath}` + (r.fileSize ? `（${(r.fileSize / 1048576).toFixed(1)}MB）` : '');
+            asmMsg = `分步动画：已生成 ${r.url || 'assembly_' + modelData.id + '.glb'}` + (r.fileSize ? `（${(r.fileSize / 1048576).toFixed(1)}MB，${r.nodeCount} 节点）` : '');
             asmStatus.textContent = asmMsg;
           } catch(e) {
             asmMsg = '分步动画生成失败：' + e.message + '（模型本身已上传成功）';
@@ -639,50 +634,32 @@
       }
     }
 
-    // ---- 分步动画（io → assembly glb），调用操作者本机的 generator-server ----
-    // 转存地址跟随当前页面环境（生产 /blocklab、测试 /blocklab-test），避免测试环境误传到生产
-    const DEFAULT_ASSEMBLY_UPLOAD_SERVER = location.origin + API;
-
-    function getAssemblyServer() {
-      return (document.getElementById('assembly-server').value || '').replace(/\/+$/, '');
-    }
-
+    // ---- 分步动画（io → assembly glb），服务器端生成：调用后端接口，按需拉起生成服务 ----
     async function checkAssemblyEnv() {
       const st = document.getElementById('assembly-status');
-      st.textContent = '正在检测本机生成服务...';
+      st.textContent = '正在检测服务器端生成服务...';
       try {
-        const res = await fetch(getAssemblyServer() + '/api/env-check');
+        const res = await fetch(API + '/api/health');
         const json = await res.json();
-        if (!json.success) {
-          st.textContent = '⚠️ 生成服务响应异常：' + (json.message || ('HTTP ' + res.status));
-          return;
-        }
-        const d = json.data || {};
-        // 如实展示服务返回的所有 *Found 布尔标志（blenderFound/makeScriptFound 等），避免"服务在线但组件缺失"的假绿灯
-        const LABELS = { blenderFound: 'Blender', makeScriptFound: '生成脚本', ldrawFound: 'LDraw 零件库' };
-        const flags = Object.entries(d)
-          .filter(([, v]) => typeof v === 'boolean')
-          .map(([k, v]) => (v ? '✅ ' : '❌ ') + (LABELS[k] || k));
-        const allOk = flags.length === 0 || flags.every(f => f.startsWith('✅'));
-        st.textContent = (allOk ? '✅ 服务在线，组件齐全' : '⚠️ 服务在线，但有组件缺失（生成会失败，请先修复）') +
-          (flags.length ? ' —— ' + flags.join('，') : '') +
-          (d.toolRoot ? '（toolRoot: ' + d.toolRoot + '）' : '');
+        st.textContent = json.status === 'ok'
+          ? '✅ 服务器在线，生成为按需模式（上传后自动拉起，空闲 30 分钟自动停止）'
+          : '⚠️ 服务器响应异常：' + (json.message || ('HTTP ' + res.status));
       } catch(e) {
-        st.textContent = '❌ 无法连接 ' + getAssemblyServer() + ' ：请在本机 tools/ldraw/generator-server 目录执行 npm start 后重试（HTTPS 页面下浏览器可能拦截本机请求，建议用 http:// 服务器IP/admin.html 访问）。';
+        st.textContent = '❌ 无法连接服务器 ' + API + ' ：' + e.message;
       }
     }
 
     async function generateAssemblyFromIoFile(ioFile, modelId) {
-      const gfd = new FormData();
-      gfd.append('io_file', ioFile);
-      gfd.append('id', String(modelId));
-      gfd.append('server', DEFAULT_ASSEMBLY_UPLOAD_SERVER);
-      gfd.append('upload', 'true');
-      const res = await fetch(getAssemblyServer() + '/api/generate-assembly', { method: 'POST', body: gfd });
+      const res = await fetch(API + '/api/admin/models/generate-assembly', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: modelId })
+      });
       let json = {};
-      try { json = await res.json(); } catch(_) { throw new Error(`生成服务返回非 JSON（HTTP ${res.status}）`); }
+      try { json = await res.json(); } catch(_) { throw new Error(`生成接口返回非 JSON（HTTP ${res.status}）`); }
       if (!res.ok || !json.success) {
-        throw new Error(json.data?.stderr || json.data?.stdout || json.message || `HTTP ${res.status}`);
+        const d = json.data || {};
+        throw new Error(d.stderr || d.error || json.message || `HTTP ${res.status}`);
       }
       return json;
     }
