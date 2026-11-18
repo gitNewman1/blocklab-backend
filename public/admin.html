@@ -74,6 +74,7 @@
       <div class="nav-item" data-section="inference-model">推理模型</div>
       <div class="nav-item" data-section="feedback">意见反馈</div>
       <div class="nav-item" data-section="stats">应用统计</div>
+      <div class="nav-item" data-section="api-test" id="api-test-nav" style="display:none;">接口测试</div>
     </div>
     <div class="main">
       <div id="models-section" class="section active">
@@ -175,6 +176,35 @@
         </div>
         <div class="card">
           <div id="stats-info" class="loading">加载中...</div>
+        </div>
+      </div>
+
+      <!-- 接口测试（仅测试环境） -->
+      <div id="api-test-section" class="section">
+        <div class="header">
+          <h2>接口测试 · 一句话生成积木模型</h2>
+        </div>
+        <div class="card">
+          <h3 style="margin-bottom:16px;">design-service（127.0.0.1:5179）</h3>
+          <div style="display:flex;gap:10px;margin-bottom:12px;">
+            <input id="design-prompt" type="text" placeholder="输入一句话，如：一棵绿色的大树"
+                   style="flex:1;padding:8px 12px;border:1px solid #dcdfe6;border-radius:4px;"
+                   onkeydown="if(event.key==='Enter')designStart()" />
+            <button class="btn btn-primary" id="design-start-btn" onclick="designStart()">开始生成</button>
+          </div>
+          <div id="design-status" style="margin-bottom:12px;color:#555;">等待发起…</div>
+          <div id="design-result" style="display:none;">
+            <div id="design-result-info" style="line-height:2;"></div>
+            <div style="margin-top:8px;display:flex;gap:10px;">
+              <a id="design-link-glb" href="#" target="_blank" class="btn">查看 glb 产物</a>
+              <a id="design-link-model" href="#" target="_blank" class="btn">查看模型详情接口</a>
+            </div>
+          </div>
+          <div id="design-error" style="display:none;color:#e74c3c;line-height:1.8;margin-top:8px;"></div>
+          <details id="design-json-wrap" style="display:none;margin-top:12px;">
+            <summary style="cursor:pointer;color:#3498db;">接口返回 JSON</summary>
+            <pre id="design-json" style="max-height:400px;overflow:auto;background:#2c3e50;color:#d4e6f1;padding:12px;border-radius:4px;font-size:12px;line-height:1.5;white-space:pre-wrap;word-break:break-all;"></pre>
+          </details>
         </div>
       </div>
 
@@ -356,6 +386,11 @@
     // 接口基址取「页面所在目录」：/blocklab/admin.html -> '/blocklab'，/admin.html -> ''
     // 这样同一份文件在「域名 + /blocklab」与「IP 直连根路径」两种入口下都能正确请求
     const API = location.pathname.replace(/\/[^/]*$/, '');
+
+    // 接口测试入口只在测试环境显示（生产 /blocklab/ 下不出现）
+    if (location.pathname.includes('/blocklab-test')) {
+      document.getElementById('api-test-nav').style.display = '';
+    }
 
     // Navigation
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -665,6 +700,85 @@
         if (el.type === 'file') el.value = ''; else el.value = '';
       });
       document.getElementById('model-modal').classList.add('show');
+    }
+
+    // ---- 一句话生成积木模型（design-service 接口测试）----
+    let designTimer = null;
+    const DESIGN_STATUS_TEXT = {
+      queued: '正在排队…', llm: '正在理解你的描述…', compile: '正在挑选零件、检查能不能拼…',
+      render: '正在生成 3D 模型…', done: '生成完成', failed: '生成失败',
+    };
+
+    async function designStart() {
+      const prompt = (document.getElementById('design-prompt').value || '').trim();
+      if (prompt.length < 2) return alert('请先输入描述（至少 2 个字）');
+      const btn = document.getElementById('design-start-btn');
+      setBtnLoading(btn, true, '发起中…');
+      clearInterval(designTimer);
+      document.getElementById('design-result').style.display = 'none';
+      document.getElementById('design-error').style.display = 'none';
+      document.getElementById('design-status').textContent = '正在发起…';
+      try {
+        const res = await fetch(API + '/api/design/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt }),
+        });
+        const json = await res.json();
+        designShowJson(json);
+        if (!res.ok || !json.jobId) throw new Error(json.error?.message || json.message || 'HTTP ' + res.status);
+        designPoll(json.jobId, btn);
+      } catch (err) {
+        setBtnLoading(btn, false);
+        document.getElementById('design-status').textContent = '';
+        designShowError(String(err.message || err));
+      }
+    }
+
+    function designPoll(jobId, btn) {
+      designTimer = setInterval(async () => {
+        try {
+          const res = await fetch(API + '/api/design/jobs/' + jobId);
+          const j = await res.json();
+          designShowJson(j);
+          document.getElementById('design-status').textContent =
+            (DESIGN_STATUS_TEXT[j.status] || j.status) + '（' + (j.progress ?? 0) + '%，attempts ' + (j.attempts || 0) + '）';
+          if (j.status === 'done') {
+            clearInterval(designTimer);
+            setBtnLoading(btn, false);
+            designShowResult(j);
+          } else if (j.status === 'failed') {
+            clearInterval(designTimer);
+            setBtnLoading(btn, false);
+            document.getElementById('design-status').textContent = '';
+            designShowError((j.error?.code || '') + '：' + (j.error?.detail || j.error?.message || '未知原因'));
+          }
+        } catch (err) {
+          // 单次轮询失败不终止，等待下一轮
+        }
+      }, 3000);
+    }
+
+    function designShowJson(data) {
+      document.getElementById('design-json-wrap').style.display = 'block';
+      document.getElementById('design-json').textContent = JSON.stringify(data, null, 2);
+    }
+
+    function designShowResult(job) {
+      const modelId = job.modelId;
+      document.getElementById('design-status').textContent = '生成完成：' + (job.stats?.parts ?? '?') + ' 件 · ' + (job.stats?.types ?? '?') + ' 种';
+      document.getElementById('design-result-info').innerHTML =
+        'jobId：<code>' + job.jobId + '</code>　modelId：<code>' + (modelId || '-') + '</code>';
+      document.getElementById('design-link-glb').href =
+        API + '/static/parts/' + modelId + '/assembly_' + modelId + '.glb';
+      document.getElementById('design-link-model').href = API + '/api/models/' + modelId;
+      document.getElementById('design-result').style.display = 'block';
+    }
+
+    function designShowError(msg) {
+      const el = document.getElementById('design-error');
+      el.textContent = '失败原因：' + msg;
+      el.style.display = 'block';
     }
 
     function setBtnLoading(btn, loading, text) {
