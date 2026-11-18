@@ -28,6 +28,9 @@
     .table th, .table td { padding: 12px; text-align: left; border-bottom: 1px solid #ecf0f1; }
     .table th { background: #f8f9fa; font-weight: 600; color: #2c3e50; }
     .table tr:hover { background: #f8f9fa; }
+    /* 模型管理页：标题行与表格内容居中 */
+    #models-section .header { justify-content: center; gap: 24px; }
+    #models-section .table th, #models-section .table td { text-align: center; }
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; }
     .modal.show { display: flex; align-items: center; justify-content: center; }
     .modal-content { background: white; border-radius: 8px; padding: 30px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
@@ -43,6 +46,9 @@
     .badge-warning { background: #fff3cd; color: #856404; }
     .badge-danger { background: #f8d7da; color: #721c24; }
     .img-preview { max-width: 100px; max-height: 100px; object-fit: cover; border-radius: 4px; }
+    /* 精选单选框：方形外观，行内仅可选中一个（radio 单选保证） */
+    input[type="radio"].featured-radio { appearance: none; width: 16px; height: 16px; border: 2px solid #7f8c8d; border-radius: 2px; vertical-align: middle; cursor: pointer; }
+    input[type="radio"].featured-radio:checked { background: #3498db; border-color: #3498db; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='white' d='M6 10.5L3.5 8l-1 1L6 12.5l7.5-7.5-1-1z'/%3E%3C/svg%3E"); }
     .section { display: none; }
     .section.active { display: block; }
     .btn:disabled { opacity: .6; cursor: not-allowed; }
@@ -59,6 +65,7 @@
     <div class="sidebar">
       <h1>BlockLab 管理</h1>
       <div class="nav-item active" data-section="models">模型管理</div>
+      <div class="nav-item" data-section="featured">每周精选</div>
       <div class="nav-item" data-section="model-types">模型分类</div>
       <div class="nav-item" data-section="recommended">推荐商品</div>
       <div class="nav-item" data-section="works">作品管理</div>
@@ -79,6 +86,24 @@
         </div>
         <div class="card">
           <div id="models-list" class="loading">加载中...</div>
+        </div>
+      </div>
+      <div id="featured-section" class="section">
+        <div class="header">
+          <h2>每周精选</h2>
+          <div>
+            <button class="btn" data-featured-mode="manual" onclick="setFeaturedMode('manual')">手动设置精选模型</button>
+            <button class="btn" data-featured-mode="weekly_likes" onclick="setFeaturedMode('weekly_likes')">按周点赞个数设置</button>
+            <button class="btn" data-featured-mode="total_likes" onclick="setFeaturedMode('total_likes')">按总点赞个数设置</button>
+          </div>
+        </div>
+        <div class="card" id="featured-current-card">
+          <h3 style="margin-bottom:12px;">本周精选</h3>
+          <div id="featured-current" class="loading">加载中...</div>
+        </div>
+        <div class="card">
+          <h3 style="margin-bottom:12px;">精选历史（过去 10 周）</h3>
+          <div id="featured-history" class="loading">加载中...</div>
         </div>
       </div>
       <div id="model-types-section" class="section">
@@ -346,6 +371,7 @@
 
     function loadSection(section) {
       if (section === 'models') loadModels();
+      else if (section === 'featured') loadFeatured();
       else if (section === 'model-types') loadModelTypes();
       else if (section === 'recommended') loadRecommended();
       else if (section === 'works') loadWorks();
@@ -436,6 +462,17 @@
         const json = await res.json();
         const models = currentModels = json.data || [];
         if (!models.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+        // 回显当前周精选：取管理端精选数据中本周记录指向的模型，勾选对应单选框
+        let featuredModelId = null; // null = 尚未获取或本周无精选
+        if (featuredCurrentId === null) {
+          try {
+            const fres = await fetch(API + '/api/admin/featured');
+            const fjson = await fres.json();
+            featuredCurrentId = fjson.success && fjson.data && fjson.data.thisWeek && fjson.data.thisWeek.model
+              ? fjson.data.thisWeek.model.id : 0;
+          } catch (e) { featuredCurrentId = 0; /* 查询失败按无精选处理 */ }
+        }
+        featuredModelId = featuredCurrentId;
         // 同步列仅在同步功能启用且台账可读时渲染；未同步行显示勾选框+「同步」按钮，已同步显示徽标
         const showSyncCol = allowSync && syncedIds !== null;
         const syncCell = m => {
@@ -453,16 +490,21 @@
           syncAllBtn.disabled = checkedSyncIds.size === 0;
         }
         el.innerHTML = `<table class="table">
-          <thead><tr><th>ID</th><th>缩略图</th><th>名称</th><th>零件数</th><th>分类</th><th>创建时间</th><th>操作</th>${showSyncCol ? '<th>同步</th>' : ''}</tr></thead>
+          <thead><tr><th>ID</th><th>缩略图</th><th>名称</th><th>零件数</th><th>分类</th><th>总点赞</th><th>周点赞</th><th>创建时间</th><th>操作</th>${showSyncCol ? '<th>同步</th>' : ''}<th>设为精选</th></tr></thead>
           <tbody>${models.map(m => `<tr>
             <td>${m.id}</td>
             <td>${m.thumbnailUrl ? `<img src="${m.thumbnailUrl}" class="img-preview">` : '-'}</td>
             <td>${m.name}</td>
             <td>${m.partCount}</td>
             <td>${m.modelTypeName || '-'}</td>
+            <td>${m.likeCount ?? 0}</td>
+            <td>${m.weeklyLikeCount ?? 0}</td>
             <td>${new Date(m.createdAt).toLocaleString()}</td>
-            <td><button class="btn btn-danger" onclick="deleteModel(${m.id})">删除</button></td>
+            <td>
+              <button class="btn btn-danger" onclick="deleteModel(${m.id})">删除</button>
+            </td>
             ${showSyncCol ? `<td>${syncCell(m)}</td>` : ''}
+            <td><input type="radio" name="featured-radio" class="featured-radio" ${m.id === featuredModelId ? 'checked' : ''} onchange="setManualFeatured(${m.id}, this)"></td>
           </tr>`).join('')}</tbody>
         </table>`;
       } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
@@ -509,6 +551,106 @@
       const ids = [...checkedSyncIds];
       if (!ids.length) return alert('请先勾选要同步的模型');
       syncModels(ids, document.getElementById('sync-all-btn'));
+    }
+
+    // ---- 每周精选 ----
+    let featuredData = null; // 最近一次 /api/admin/featured 响应，供页签高亮与手动选择回显
+    let featuredCurrentId = null; // 当前周精选模型 ID（null=未获取，0=无精选），供「精选」列单选框回显
+
+    const FEATURED_SOURCE_LABEL = { manual: '手动设置', weekly_likes: '按周点赞', total_likes: '按总点赞' };
+
+    async function loadFeatured() {
+      const curEl = document.getElementById('featured-current');
+      const hisEl = document.getElementById('featured-history');
+      curEl.innerHTML = '<div class="loading">加载中...</div>';
+      hisEl.innerHTML = '';
+      try {
+        const res = await fetch(API + '/api/admin/featured');
+        const json = await res.json();
+        if (!json.data) throw new Error(json.message || '加载失败');
+        featuredData = json.data;
+
+        // 模式按钮高亮当前模式
+        document.querySelectorAll('[data-featured-mode]').forEach(b => {
+          b.classList.toggle('btn-primary', b.dataset.featuredMode === featuredData.mode);
+        });
+
+        // 本周精选卡片
+        const tw = featuredData.thisWeek;
+        if (!tw || !tw.model) {
+          curEl.innerHTML = '<div class="empty">本周暂无精选模型。手动模式下请到「模型管理」勾选「精选」单选框，或切换到自动模式。</div>';
+        } else {
+          const fallback = featuredData.mode !== 'manual' && tw.source === 'manual';
+          curEl.innerHTML = `<div style="display:flex;align-items:center;gap:16px;">
+            ${tw.model.thumbnailUrl ? `<img src="${tw.model.thumbnailUrl}" class="img-preview" style="width:64px;height:64px;object-fit:cover;">` : ''}
+            <div>
+              <div style="font-size:16px;font-weight:bold;">#${tw.model.id} ${tw.model.name}</div>
+              <div style="color:#777;margin-top:4px;">
+                来源：${FEATURED_SOURCE_LABEL[tw.source] || tw.source}
+                ${fallback ? '（自动模式榜单为空，手动选择兜底）' : ''}
+                ｜总点赞 ${tw.model.likeCount} ｜周点赞 ${tw.model.weeklyLikeCount}
+              </div>
+            </div>
+          </div>`;
+        }
+
+        // 过去 10 周历史
+        const history = featuredData.history || [];
+        if (!history.length) {
+          hisEl.innerHTML = '<div class="empty">暂无历史记录</div>';
+        } else {
+          hisEl.innerHTML = `<table class="table">
+            <thead><tr><th>周起始</th><th>精选模型</th><th>来源</th></tr></thead>
+            <tbody>${history.map(h => `<tr>
+              <td>${new Date(h.weekStart).toLocaleDateString()}（${h.model ? '有记录' : '无记录'}）</td>
+              <td>${h.model ? `#${h.model.id} ${h.model.name}` : '<span style="color:#aaa;">模型已删除</span>'}</td>
+              <td>${FEATURED_SOURCE_LABEL[h.source] || h.source}</td>
+            </tr>`).join('')}</tbody>
+          </table>`;
+        }
+      } catch (e) {
+        curEl.innerHTML = '<div class="empty">加载失败</div>';
+      }
+    }
+
+    // 切换精选模式：manual / weekly_likes / total_likes
+    async function setFeaturedMode(mode) {
+      if (mode !== 'manual' && !confirm(`确认切换到「${FEATURED_SOURCE_LABEL[mode]}」模式？\n切换后当前周精选会立即按新模式重算（历史周不受影响）。`)) return;
+      try {
+        const res = await fetch(API + '/api/admin/featured/mode', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode })
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message || '切换失败');
+        featuredCurrentId = null; // 模式切换会重算当前周，回显缓存失效
+        loadFeatured();
+      } catch (e) {
+        alert('切换模式失败: ' + (e.message || e));
+      }
+    }
+
+    // 手动设置某模型为当前周精选（模型管理页「精选」列单选框入口；取消/失败时回退勾选状态）
+    async function setManualFeatured(modelId, radioEl) {
+      if (!confirm(`确认将模型 #${modelId} 设为本周精选？`)) {
+        radioEl.checked = false;
+        return;
+      }
+      try {
+        const res = await fetch(API + '/api/admin/featured/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modelId })
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message || '设置失败');
+        featuredCurrentId = modelId; // 更新回显缓存
+        alert('设置成功：该模型已成为本周精选。');
+      } catch (e) {
+        alert('设置失败: ' + (e.message || e));
+        radioEl.checked = false;
+      }
     }
 
     async function showAddModel() {

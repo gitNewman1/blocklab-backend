@@ -140,3 +140,39 @@ model SyncedModels {
 
   @@map("synced_models")
 }
+
+// 积木模型点赞：userId+modelId 唯一（切换式点赞），createdAt 用于滚动 7 天周统计。
+model ModelLike {
+  id        Int      @id @default(autoincrement())
+  modelId   Int      @map("model_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, modelId])
+  @@map("model_likes")
+  @@index([modelId])
+  @@index([createdAt])
+}
+
+// 每周精选：一周一条记录（weekStart 唯一），当前周实时重算 upsert，历史周固化不变。
+model FeaturedModel {
+  id        Int      @id @default(autoincrement())
+  weekStart DateTime @unique @map("week_start") @db.Date
+  modelId   Int      @map("model_id")
+  // 记录来源：manual 手动 / weekly_likes 按周点赞 / total_likes 按总点赞（含兜底）
+  source    String   @default("manual")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("featured_models")
+}
+
+// 每周精选模式配置（固定 id=1）：manual / weekly_likes / total_likes。
+// manualModelId 记住最后一次手动选择的模型，供自动模式榜单为空时兜底。
+model FeaturedConfig {
+  id            Int      @id @default(1)
+  mode          String   @default("manual")
+  manualModelId Int?     @map("manual_model_id")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("featured_config")
+}

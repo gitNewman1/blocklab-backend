@@ -20,6 +20,7 @@ import { avatarUploadRoutes } from './routes/auth/avatar-upload';
 import { feedbackRoutes } from './routes/feedback';
 import { adminFeedbackRoutes } from './routes/admin/feedback';
 import { adminWorkReviewRoutes } from './routes/admin/work-review';
+import { adminFeaturedRoutes } from './routes/admin/featured';
 import { userUploadRoutes } from './routes/upload/image';
 import { statsRoutes, adminStatsRoutes } from './routes/stats';
 import { workRoutes } from './routes/works';
@@ -76,6 +77,7 @@ export async function buildApp() {
   await app.register(statsRoutes, { prefix: '/api/stats' });
   await app.register(adminStatsRoutes, { prefix: '/api/admin/stats' });
   await app.register(adminWorkReviewRoutes, { prefix: '/api/admin/work-review' });
+  await app.register(adminFeaturedRoutes, { prefix: '/api/admin/featured' });
   await app.register(workRoutes, { prefix: '/api/works' });
   await app.register(userRoutes, { prefix: '/api/users' });
 
