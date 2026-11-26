@@ -1,11 +1,14 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { PrismaClient } from '@prisma/client';
 import { code2Session, WechatError } from '../../services/wechat.service';
+import { verifyHuaweiIdToken, HuaweiError } from '../../services/huawei.service';
 import { signToken } from '../../services/jwt.service';
 
 const prisma = new PrismaClient();
 
 interface LoginBody {
+  // 华为账号一键登录 ID Token（服务端 JWKS 本地验签）
+  idToken?: string;
   // 兼容旧版模拟入参:直接传 unionId
   unionId?: string;
   // 微信小程序 wx.login 拿到的临时 code,存在时用它换 openid
@@ -68,11 +71,12 @@ export async function authRoutes(app: FastifyInstance) {
   const loginOptions = {
       schema: {
         tags: ['Auth'],
-        summary: '微信小程序登录:code 换 openid 登录/注册,或兼容旧版直接传 unionId',
+        summary: '华为账号/微信小程序登录:idToken 本地验签、code 换 openid,或兼容旧版直接传 unionId',
         body: {
           type: 'object',
-          anyOf: [{ required: ['unionId'] }, { required: ['code'] }],
+          anyOf: [{ required: ['idToken'] }, { required: ['code'] }, { required: ['unionId'] }],
           properties: {
+            idToken: { type: 'string', minLength: 1, description: '华为账号一键登录 ID Token,服务端 JWKS 本地验签,以 sub (UnionID) 作为用户标识' },
             unionId: { type: 'string', minLength: 1, description: '兼容旧版:直接以该值作为用户唯一标识登录' },
             code: { type: 'string', minLength: 1, description: 'wx.login 获取的临时 code,通过微信 code2session 换取 openid' },
             nickName: { type: 'string', maxLength: 100, description: '微信昵称,可选' },
@@ -115,7 +119,7 @@ export async function authRoutes(app: FastifyInstance) {
             }
           },
           401: {
-            description: '微信 code 换 session 失败',
+            description: '微信 code 换 session 或华为 ID Token 校验失败',
             type: 'object',
             properties: {
               success: { type: 'boolean' },
@@ -132,7 +136,10 @@ export async function authRoutes(app: FastifyInstance) {
 
       try {
         let identity = body.unionId;
-        if (body.code) {
+        if (body.idToken) {
+          // 华为 ID Token 本地验签通过才信任;sub 为 UnionID,与微信共用 users 表
+          identity = (await verifyHuaweiIdToken(body.idToken)).sub;
+        } else if (body.code) {
           const session = await code2Session(body.code);
           // session_key 仅用于微信服务端通信,不落库、不记录日志
           identity = session.openid;
@@ -141,7 +148,7 @@ export async function authRoutes(app: FastifyInstance) {
         if (!identity) {
           return reply.code(400).send({
             success: false,
-            message: 'unionId or code is required',
+            message: 'idToken, code or unionId is required',
             error: 'BAD_REQUEST'
           });
         }
@@ -176,6 +183,13 @@ export async function authRoutes(app: FastifyInstance) {
             success: false,
             message: error.message,
             error: 'WECHAT_CODE2SESSION_FAILED'
+          });
+        }
+        if (error instanceof HuaweiError) {
+          return reply.code(401).send({
+            success: false,
+            message: error.message,
+            error: 'HUAWEI_IDTOKEN_VERIFY_FAILED'
           });
         }
         request.log.error({ error: error.message, stack: error.stack }, 'Login failed');

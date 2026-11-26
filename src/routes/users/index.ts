@@ -9,7 +9,7 @@ export async function userRoutes(app: FastifyInstance) {
     preHandler: requireAuth,
     schema: {
       tags: ['Users'],
-      summary: '获取个人信息',
+      summary: '获取个人信息（身份从 token 解析）',
       params: {
         type: 'object',
         required: ['userId'],
@@ -37,7 +37,8 @@ export async function userRoutes(app: FastifyInstance) {
     }
   }, async (request, reply) => {
     try {
-      const { userId } = request.params as { userId: string };
+      // 身份从 token 取（requireAuth 已校验）；URL 参数仅为兼容旧客户端保留，不可信
+      const userId = request.user!.userId;
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: {

@@ -48,6 +48,10 @@ export const config = {
     secret: process.env.WX_SECRET || '',
     timeoutMs: Number.isFinite(parsedWxTimeoutMs) ? parsedWxTimeoutMs : 8000
   },
+  huawei: {
+    // 华为应用级 Client ID（公开标识）；ID Token 的 aud 必须等于该值
+    clientId: process.env.HUAWEI_CLIENT_ID || '6917617593502447996'
+  },
   jwt: {
     secret: process.env.JWT_SECRET || 'blocklab-dev-insecure-secret',
     ttlSeconds: (Number.isFinite(parsedJwtTtlDays) ? parsedJwtTtlDays : 30) * 24 * 60 * 60
