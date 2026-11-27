@@ -1,130 +1,28 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import dns from 'dns';
-import net from 'net';
 import { PrismaClient } from '@prisma/client';
 import { requireAuth } from '../../plugins/auth';
-import { LocalStorageService } from '../../services/local-storage.service';
 
 const prisma = new PrismaClient();
 
-// 头像下载转存限制（华为 avatarUri 是临时链接，服务端必须下载转存成永久 URL 再入库）
-const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
-const AVATAR_FETCH_TIMEOUT_MS = 15000;
-const ALLOWED_AVATAR_MIMES = new Map<string, string>([
-  ['image/jpeg', '.jpg'],
-  ['image/png', '.png'],
-  ['image/gif', '.gif'],
-  ['image/webp', '.webp'],
-  ['image/bmp', '.bmp']
-]);
-
-class AvatarFetchError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'AvatarFetchError';
-  }
-}
-
-/** 内网/回环/链路本地等私有地址一律拒绝（防 SSRF 打内网） */
-function isPrivateIp(ip: string): boolean {
-  if (ip === '::' || ip === '::1') return true;
-  if (ip.startsWith('fe80:') || ip.startsWith('fc') || ip.startsWith('fd')) return true;
-  if (ip.startsWith('::ffff:')) {
-    const v4 = ip.slice(7);
-    return v4 === '' || isPrivateIp(v4);
-  }
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      a >= 224
-    );
-  }
-  return true; // 无法识别的地址一律拒绝
-}
-
-async function assertPublicHost(hostname: string): Promise<void> {
-  const host = hostname.toLowerCase();
-  if (host === 'localhost' || host.endsWith('.local')) {
-    throw new AvatarFetchError('avatarUrl 域名不允许');
-  }
-  if (net.isIP(host)) {
-    if (isPrivateIp(host)) throw new AvatarFetchError('avatarUrl 不允许指向内网地址');
-    return;
-  }
-  let addresses: dns.LookupAddress[];
-  try {
-    addresses = await dns.promises.lookup(host, { all: true });
-  } catch {
-    throw new AvatarFetchError('avatarUrl 域名解析失败');
-  }
-  if (addresses.length === 0) throw new AvatarFetchError('avatarUrl 域名解析失败');
-  for (const { address } of addresses) {
-    if (isPrivateIp(address)) throw new AvatarFetchError('avatarUrl 不允许指向内网地址');
-  }
-}
-
 /**
- * 下载头像并转存前置校验：仅 https、域名解析后必须全部为公网地址、
- * 重定向目标必须仍为 https（跨域则重新校验）、图片类型白名单、大小上限。
+ * 头像 URL 格式校验：客户端（华为/微信）传回的 avatarUrl 已是云桶永久 URL，
+ * 服务端只做格式校验后落库，不再下载转存，故无 SSRF 面。
+ * 仅校验是否为合法的 http/https 绝对链接，拒绝 data:/javascript: 等危险 scheme。
  */
-async function downloadAvatar(avatarUrl: string): Promise<{ buffer: Buffer; ext: string; mimetype: string }> {
+function validateAvatarUrl(avatarUrl: string): string | null {
   let url: URL;
   try {
     url = new URL(avatarUrl);
   } catch {
-    throw new AvatarFetchError('avatarUrl 不是合法 URL');
+    return 'avatarUrl 不是合法 URL';
   }
-  if (url.protocol !== 'https:') throw new AvatarFetchError('avatarUrl 仅支持 https 链接');
-  await assertPublicHost(url.hostname);
-
-  let res: Response;
-  try {
-    res = await fetch(url, { signal: AbortSignal.timeout(AVATAR_FETCH_TIMEOUT_MS) });
-  } catch (error: any) {
-    throw new AvatarFetchError(`avatarUrl 下载失败: ${error.message}`);
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    return 'avatarUrl 仅支持 http/https 链接';
   }
-  if (!res.ok) throw new AvatarFetchError(`avatarUrl 下载失败: HTTP ${res.status}`);
-
-  const finalUrl = new URL(res.url || url.href);
-  if (finalUrl.protocol !== 'https:') throw new AvatarFetchError('avatarUrl 重定向目标必须为 https');
-  if (finalUrl.hostname !== url.hostname) await assertPublicHost(finalUrl.hostname);
-
-  const mimetype = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
-  const ext = ALLOWED_AVATAR_MIMES.get(mimetype);
-  if (!ext) throw new AvatarFetchError(`不支持的头像类型: ${mimetype || 'unknown'}`);
-
-  const body = res.body;
-  if (!body) throw new AvatarFetchError('avatarUrl 响应内容为空');
-
-  const chunks: Buffer[] = [];
-  let total = 0;
-  const reader = body.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const buf = Buffer.from(value);
-    total += buf.length;
-    if (total > AVATAR_MAX_BYTES) {
-      await reader.cancel();
-      throw new AvatarFetchError(`头像过大（上限 ${AVATAR_MAX_BYTES / 1024 / 1024}MB）`);
-    }
-    chunks.push(buf);
-  }
-  const buffer = Buffer.concat(chunks);
-  if (buffer.length === 0) throw new AvatarFetchError('头像内容为空');
-
-  return { buffer, ext, mimetype };
+  return null;
 }
 
 export async function userRoutes(app: FastifyInstance) {
-  const storageService = new LocalStorageService();
-
   app.get('/:userId/profile', {
     preHandler: requireAuth,
     schema: {
@@ -179,19 +77,18 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
-  // 更新个人资料（昵称/头像）。身份从 token 取。
-  // 头像来源（如华为 avatarUri）是临时链接，用户改头像后原链接失效，
-  // 故服务端下载转存到本地存储，入库的是永久 URL。
+  // 更新个人资料（昵称/头像/手机号）。身份从 token 取。
+  // avatarUrl 由客户端传回云桶永久 URL，服务端仅格式校验后落库，不下载、不转存。
   app.post('/profile', {
     preHandler: requireAuth,
     schema: {
       tags: ['Users'],
-      summary: '更新个人资料（昵称/头像/手机号；头像服务端下载转存为永久 URL）',
+      summary: '更新个人资料（昵称/头像/手机号；头像为云桶永久 URL，仅格式校验后落库）',
       body: {
         type: 'object',
         properties: {
           nickname: { type: 'string', maxLength: 100, description: '昵称（华为 displayName / 微信 nickName），可选' },
-          avatarUrl: { type: 'string', description: '头像链接（华为 avatarUri 为临时链接，服务端下载转存后返回永久 URL），可选' },
+          avatarUrl: { type: 'string', description: '头像永久 URL（客户端从云桶取回，服务端仅格式校验后落库），可选' },
           phone: { type: 'string', maxLength: 20, description: '手机号（华为手机号凭证 / 微信 getPhoneNumber），可选' }
         }
       },
@@ -236,19 +133,17 @@ export async function userRoutes(app: FastifyInstance) {
       if (phone && !/^\+?[0-9][0-9\s-]{4,19}$/.test(phone)) {
         return reply.code(400).send({ success: false, message: 'phone 格式不合法', error: 'INVALID_PHONE' });
       }
+      if (avatarUrl) {
+        const avatarErr = validateAvatarUrl(avatarUrl);
+        if (avatarErr) {
+          return reply.code(400).send({ success: false, message: avatarErr, error: 'INVALID_AVATAR_URL' });
+        }
+      }
 
       const data: { nickname?: string; avatarUrl?: string; phone?: string } = {};
       if (nickname) data.nickname = nickname;
       if (phone) data.phone = phone;
-
-      if (avatarUrl) {
-        const { buffer, ext, mimetype } = await downloadAvatar(avatarUrl);
-        const savedUrl = await storageService.uploadFile(
-          { filename: `avatar${ext}`, mimetype, encoding: 'binary', data: buffer },
-          'avatars'
-        );
-        data.avatarUrl = savedUrl;
-      }
+      if (avatarUrl) data.avatarUrl = avatarUrl;
 
       const user = await prisma.user.update({
         where: { id: request.user!.userId },
@@ -262,9 +157,6 @@ export async function userRoutes(app: FastifyInstance) {
         data: { userId: user.id, unionId: user.unionId, nickname: user.nickname, avatarUrl: user.avatarUrl, phone: user.phone }
       });
     } catch (error: any) {
-      if (error instanceof AvatarFetchError) {
-        return reply.code(400).send({ success: false, message: error.message, error: 'AVATAR_FETCH_FAILED' });
-      }
       request.log.error({ error: error.message, stack: error.stack }, 'user profile update failed');
       return reply.code(500).send({ success: false, message: error.message, error: 'INTERNAL_ERROR' });
     }
