@@ -13,6 +13,8 @@
     .nav-item { padding: 12px 20px; cursor: pointer; transition: background 0.2s; }
     .nav-item:hover { background: #34495e; }
     .nav-item.active { background: #3498db; }
+    .api-docs-link { display: block; padding: 12px 20px; color: #9fd0f5; text-decoration: none; font-size: 14px; transition: background 0.2s; border-bottom: 1px solid #34495e; margin-bottom: 8px; }
+    .api-docs-link:hover { background: #34495e; color: #fff; }
     .main { flex: 1; padding: 30px; overflow-y: auto; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
     .header h2 { font-size: 24px; color: #2c3e50; }
@@ -66,6 +68,7 @@
   <div class="container">
     <div class="sidebar">
       <h1>BlockLab 管理</h1>
+      <a class="api-docs-link" href="docs" target="_blank" title="Swagger API 文档">📖 API 文档</a>
       <div class="nav-item active" data-section="models">模型管理</div>
       <div class="nav-item" data-section="featured">每周精选</div>
       <div class="nav-item" data-section="model-types">模型分类</div>
