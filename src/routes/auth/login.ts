@@ -27,7 +27,7 @@ interface LoginResult {
   isNewUser: boolean;
 }
 
-async function findOrCreateUser(identity: string, profile: { nickname?: string; avatarUrl?: string }): Promise<LoginResult> {
+async function findOrCreateUser(identity: string, profile: { nickname?: string; avatarUrl?: string }, platform: 'huawei' | 'wechat'): Promise<LoginResult> {
   const existing = await prisma.user.findUnique({ where: { unionId: identity } });
 
   if (existing) {
@@ -56,6 +56,7 @@ async function findOrCreateUser(identity: string, profile: { nickname?: string; 
   const user = await prisma.user.create({
     data: {
       unionId: identity,
+      platform,
       ...(profile.nickname ? { nickname: profile.nickname } : {}),
       ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {})
     }
@@ -153,10 +154,11 @@ export async function authRoutes(app: FastifyInstance) {
           });
         }
 
+        // 华为 ID Token 路径记 huawei；微信 code / 旧版 unionId 路径记 wechat
         const { user, isNewUser } = await findOrCreateUser(identity, {
           nickname: body.nickName,
           avatarUrl: body.avatarUrl
-        });
+        }, body.idToken ? 'huawei' : 'wechat');
 
         const token = signToken(user.id);
 

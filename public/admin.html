@@ -45,6 +45,8 @@
     .badge-success { background: #d4edda; color: #155724; }
     .badge-warning { background: #fff3cd; color: #856404; }
     .badge-danger { background: #f8d7da; color: #721c24; }
+    .badge-huawei { background: #fdeaea; color: #c7000b; }
+    .avatar-cell { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; vertical-align: middle; }
     .img-preview { max-width: 100px; max-height: 100px; object-fit: cover; border-radius: 4px; }
     /* 精选单选框：方形外观，行内仅可选中一个（radio 单选保证） */
     input[type="radio"].featured-radio { appearance: none; width: 16px; height: 16px; border: 2px solid #7f8c8d; border-radius: 2px; vertical-align: middle; cursor: pointer; }
@@ -136,6 +138,14 @@
       <div id="users-section" class="section">
         <div class="header">
           <h2>用户管理</h2>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <select id="users-platform-filter" onchange="renderUsersTable()" style="padding:8px;border:1px solid #ddd;border-radius:4px;">
+              <option value="">全部平台</option>
+              <option value="huawei">华为账号</option>
+              <option value="wechat">微信小程序</option>
+            </select>
+            <input id="users-search" placeholder="搜索昵称 / 手机号 / ID" oninput="renderUsersTable()" style="padding:8px;border:1px solid #ddd;border-radius:4px;width:220px;">
+          </div>
         </div>
         <div class="card">
           <div id="users-list" class="loading">加载中...</div>
@@ -1025,8 +1035,43 @@
     }
 
     // ---- Users ----
+    let allUsers = [];
     async function loadUsers() {
-      document.getElementById('users-list').innerHTML = '<div class="empty">请通过用户ID查询</div>';
+      const el = document.getElementById('users-list');
+      el.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const res = await fetch(API + '/api/admin/users');
+        const json = await res.json();
+        allUsers = (json && json.data) || [];
+        renderUsersTable();
+      } catch(e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+    }
+
+    function renderUsersTable() {
+      const el = document.getElementById('users-list');
+      const platform = (document.getElementById('users-platform-filter') || {}).value || '';
+      const kw = ((document.getElementById('users-search') || {}).value || '').trim().toLowerCase();
+      const rows = allUsers.filter(u => {
+        if (platform && u.platform !== platform) return false;
+        if (!kw) return true;
+        return [u.nickname, u.phone, u.userId, u.unionId].some(v => v && String(v).toLowerCase().includes(kw));
+      });
+      if (!allUsers.length) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+      if (!rows.length) { el.innerHTML = '<div class="empty">没有匹配的用户</div>'; return; }
+      const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      el.innerHTML = `<table class="table">
+        <thead><tr><th>头像</th><th>昵称</th><th>手机号</th><th>平台</th><th>UnionID</th><th>用户ID</th><th>作品</th><th>注册时间</th></tr></thead>
+        <tbody>${rows.map(u => `<tr>
+          <td>${u.avatarUrl ? `<img src="${esc(u.avatarUrl)}" class="avatar-cell" onerror="this.style.visibility='hidden'">` : '<span style="color:#bbb">-</span>'}</td>
+          <td>${u.nickname ? esc(u.nickname) : '<span style="color:#bbb">-</span>'}</td>
+          <td>${u.phone ? esc(u.phone) : '<span style="color:#bbb">-</span>'}</td>
+          <td><span class="badge ${u.platform === 'huawei' ? 'badge-huawei' : 'badge-success'}">${u.platform === 'huawei' ? '华为账号' : '微信小程序'}</span></td>
+          <td style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${esc(u.unionId)}">${esc(u.unionId)}</td>
+          <td style="font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis" title="${esc(u.userId)}">${esc(u.userId)}</td>
+          <td>${u.workCount}</td>
+          <td>${esc(u.createdAt)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
     }
 
     // ---- Feedback ----

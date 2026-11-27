@@ -31,6 +31,9 @@ model User {
   unionId     String     @unique @map("union_id")
   nickname    String?    @db.VarChar(100)
   avatarUrl   String?    @map("avatar_url")
+  phone       String?    @map("phone")
+  // 登录平台：huawei=华为账号，wechat=微信小程序（含旧版 unionId 直传路径）
+  platform    String     @default("wechat") @map("platform")
   scanCount   Int        @default(0) @map("scan_count")
   createdAt   DateTime   @default(now()) @map("created_at")
   works       Work[]

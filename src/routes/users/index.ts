@@ -147,6 +147,8 @@ export async function userRoutes(app: FastifyInstance) {
                 unionId:      { type: 'string' },
                 nickname:     { type: ['string', 'null'] },
                 avatarUrl:    { type: ['string', 'null'] },
+                phone:        { type: ['string', 'null'] },
+                platform:     { type: 'string' },
                 scanCount:    { type: 'integer' },
                 workCount:    { type: 'integer' },
                 likeCount:    { type: 'integer' }
@@ -163,7 +165,7 @@ export async function userRoutes(app: FastifyInstance) {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: {
-          id: true, unionId: true, nickname: true, avatarUrl: true, scanCount: true,
+          id: true, unionId: true, nickname: true, avatarUrl: true, phone: true, platform: true, scanCount: true,
           _count: { select: { works: true } }
         }
       });
@@ -184,12 +186,13 @@ export async function userRoutes(app: FastifyInstance) {
     preHandler: requireAuth,
     schema: {
       tags: ['Users'],
-      summary: '更新个人资料（昵称/头像；头像服务端下载转存为永久 URL）',
+      summary: '更新个人资料（昵称/头像/手机号；头像服务端下载转存为永久 URL）',
       body: {
         type: 'object',
         properties: {
           nickname: { type: 'string', maxLength: 100, description: '昵称（华为 displayName / 微信 nickName），可选' },
-          avatarUrl: { type: 'string', description: '头像链接（华为 avatarUri 为临时链接，服务端下载转存后返回永久 URL），可选' }
+          avatarUrl: { type: 'string', description: '头像链接（华为 avatarUri 为临时链接，服务端下载转存后返回永久 URL），可选' },
+          phone: { type: 'string', maxLength: 20, description: '手机号（华为手机号凭证 / 微信 getPhoneNumber），可选' }
         }
       },
       response: {
@@ -204,7 +207,8 @@ export async function userRoutes(app: FastifyInstance) {
                 userId:    { type: 'string' },
                 unionId:   { type: 'string' },
                 nickname:  { type: ['string', 'null'] },
-                avatarUrl: { type: ['string', 'null'] }
+                avatarUrl: { type: ['string', 'null'] },
+                phone:     { type: ['string', 'null'] }
               }
             }
           }
@@ -221,16 +225,21 @@ export async function userRoutes(app: FastifyInstance) {
     }
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const body = (request.body ?? {}) as { nickname?: string; avatarUrl?: string };
+      const body = (request.body ?? {}) as { nickname?: string; avatarUrl?: string; phone?: string };
       const nickname = typeof body.nickname === 'string' ? body.nickname.trim() : '';
       const avatarUrl = typeof body.avatarUrl === 'string' ? body.avatarUrl.trim() : '';
+      const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
 
-      if (!nickname && !avatarUrl) {
-        return reply.code(400).send({ success: false, message: '请提供 nickname 或 avatarUrl', error: 'BAD_REQUEST' });
+      if (!nickname && !avatarUrl && !phone) {
+        return reply.code(400).send({ success: false, message: '请提供 nickname / avatarUrl / phone 至少一项', error: 'BAD_REQUEST' });
+      }
+      if (phone && !/^\+?[0-9][0-9\s-]{4,19}$/.test(phone)) {
+        return reply.code(400).send({ success: false, message: 'phone 格式不合法', error: 'INVALID_PHONE' });
       }
 
-      const data: { nickname?: string; avatarUrl?: string } = {};
+      const data: { nickname?: string; avatarUrl?: string; phone?: string } = {};
       if (nickname) data.nickname = nickname;
+      if (phone) data.phone = phone;
 
       if (avatarUrl) {
         const { buffer, ext, mimetype } = await downloadAvatar(avatarUrl);
@@ -244,13 +253,13 @@ export async function userRoutes(app: FastifyInstance) {
       const user = await prisma.user.update({
         where: { id: request.user!.userId },
         data,
-        select: { id: true, unionId: true, nickname: true, avatarUrl: true }
+        select: { id: true, unionId: true, nickname: true, avatarUrl: true, phone: true }
       });
       request.log.info({ userId: user.id, hasAvatar: !!data.avatarUrl }, 'user profile updated');
       return reply.send({
         success: true,
         message: 'Profile updated',
-        data: { userId: user.id, unionId: user.unionId, nickname: user.nickname, avatarUrl: user.avatarUrl }
+        data: { userId: user.id, unionId: user.unionId, nickname: user.nickname, avatarUrl: user.avatarUrl, phone: user.phone }
       });
     } catch (error: any) {
       if (error instanceof AvatarFetchError) {
